@@ -14,6 +14,11 @@ const PORT = process.env.PORT || 8787
 // Parse raw body for POST/PUT requests
 app.use(express.raw({ type: '*/*', limit: '10mb' }))
 
+// Health check endpoint
+app.get('/health', (_req, res) => {
+	res.status(200).json({ status: 'ok', cache: cache.getStats() })
+})
+
 // Main request handler
 app.use(async (req, res) => {
 	try {

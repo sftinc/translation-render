@@ -10,7 +10,7 @@ export const HOST_SETTINGS: Record<string, HostSettings> = {
 	'sp.find-your-item.com': {
 		origin: 'https://www.esnipe.com',
 		sourceLang: 'en',
-		targetLang: 'es',
+		targetLang: 'sp',
 		skipWords: ['eSnipe'],
 		skipPatterns: ['pii', 'numeric'],
 		translatePath: true,
@@ -30,7 +30,7 @@ export const HOST_SETTINGS: Record<string, HostSettings> = {
 	localhost: {
 		origin: 'https://www.esnipe.com',
 		sourceLang: 'en',
-		targetLang: 'es',
+		targetLang: 'sp',
 		skipWords: ['eSnipe', 'eBay'],
 		skipPatterns: ['pii', 'numeric'],
 		translatePath: true,
