@@ -5,25 +5,13 @@
  */
 
 import type { Request, Response } from 'express'
-import type { MemoryCache } from './memory-cache'
-import type { PatternizedText, Content, PathnameMapping } from './types'
-import { HOST_SETTINGS } from './config'
+import type { PatternizedText, Content } from './types'
 import { parseHTMLDocument } from './fetch/dom-parser'
 import { extractSegments, extractLinkPathnames } from './fetch/dom-extractor'
 import { applyTranslations } from './fetch/dom-applicator'
 import { rewriteLinks } from './fetch/dom-rewriter'
 import { addLangMetadata } from './fetch/dom-metadata'
 import { translateSegments } from './translation/translate-segments'
-import {
-	getSegmentCache,
-	matchSegmentsWithCache,
-	updateSegmentCache,
-	lookupOriginalPathname,
-	lookupOriginalPathnameSync,
-	updatePathnameMapping,
-	getPathnameMapping,
-	batchUpdatePathnameMapping,
-} from './cache'
 import { applyPatterns, restorePatterns } from './translation/skip-patterns'
 import {
 	shouldSkipPath,
@@ -31,10 +19,67 @@ import {
 	translatePathnamesBatch,
 } from './translation/translate-pathnames'
 import { isStaticAsset } from './utils'
+import {
+	getHostConfig,
+	lookupPathname,
+	batchLookupPathnames,
+	batchGetTranslations,
+	batchUpsertTranslations,
+	batchUpsertPathnames,
+	type TranslationItem,
+	type PathnameMapping,
+} from './db'
 
 // Control console logging
 const redirectLogging = false // redirects
 const proxyLogging = false // non-HTML resources (proxied)
+
+/**
+ * Result from matching segments with cache
+ */
+interface MatchResult {
+	cached: Map<number, string> // Map of segment index → cached translation
+	newSegments: Content[] // Segments that need translation
+	newIndices: number[] // Original indices of new segments
+}
+
+/**
+ * Match extracted segments against cached translations (from database)
+ * @param segments - Extracted segments from page
+ * @param cache - Translation cache Map (original → translated)
+ * @returns Match result with cached translations and new segments
+ */
+function matchSegmentsWithMap(segments: Content[], cache: Map<string, string>): MatchResult {
+	const cached = new Map<number, string>()
+	const newSegments: Content[] = []
+	const newIndices: number[] = []
+
+	if (cache.size === 0) {
+		// Cold cache - all segments are new
+		return {
+			cached,
+			newSegments: segments,
+			newIndices: segments.map((_, i) => i),
+		}
+	}
+
+	// Match each segment using O(1) hash lookup
+	for (let i = 0; i < segments.length; i++) {
+		const segment = segments[i]
+		const translation = cache.get(segment.value)
+
+		if (translation) {
+			// Cache hit
+			cached.set(i, translation)
+		} else {
+			// Cache miss - need to translate
+			newSegments.push(segment)
+			newIndices.push(i)
+		}
+	}
+
+	return { cached, newSegments, newIndices }
+}
 
 /**
  * Rewrite redirect Location header from origin domain to translated domain
@@ -68,27 +113,26 @@ const GOOGLE_PROJECT_ID = process.env.GOOGLE_PROJECT_ID || ''
 /**
  * Main request handler for Express
  */
-export async function handleRequest(req: Request, res: Response, cache: MemoryCache): Promise<void> {
+export async function handleRequest(req: Request, res: Response): Promise<void> {
 	const protocol = req.protocol || 'http'
 	const host = req.get('host') || ''
 	const url = new URL(req.originalUrl, `${protocol}://${host}`)
 
 	try {
-		// 1. Parse request and determine target language
-		const hostSettings = HOST_SETTINGS[host.startsWith('localhost') ? host.split(':')[0] : host]
+		// 1. Parse request and determine target language from database
+		const hostConfig = await getHostConfig(host.startsWith('localhost') ? host.split(':')[0] : host)
 
-		if (!hostSettings) {
+		if (!hostConfig) {
 			res.status(404).set('Content-Type', 'text/plain').send('Not Found')
 			return
 		}
 
-		const targetLang = hostSettings.targetLang
+		const targetLang = hostConfig.targetLang
 
 		// Extract per-domain origin configuration
-		const originBase = hostSettings.origin
-		const originBaseUrl = new URL(originBase)
-		const originHostname = originBaseUrl.hostname
-		const sourceLang = hostSettings.sourceLang
+		const originBase = hostConfig.origin
+		const originHostname = hostConfig.originDomain
+		const sourceLang = hostConfig.sourceLang
 
 		// Resolve pathname (reverse lookup for translated URLs)
 		// Always attempt reverse lookup to support bookmarked/indexed translated URLs
@@ -101,10 +145,6 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 
 		const incomingPathname = url.pathname
 		let originalPathname = incomingPathname
-
-		// Initialize pathname cache variables (default null with tracking flag)
-		let pathnameMapping: PathnameMapping | null = null
-		let pathnameSearched = false
 
 		// CRITICAL: Early exit for static assets - skip ALL cache operations
 		if (isStaticAsset(incomingPathname)) {
@@ -149,8 +189,8 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 					responseHeaders[key] = value
 				}
 			})
-			if (hostSettings.proxiedCache && hostSettings.proxiedCache > 0) {
-				const maxAgeSeconds = hostSettings.proxiedCache * 60
+			if (hostConfig.proxiedCache && hostConfig.proxiedCache > 0) {
+				const maxAgeSeconds = hostConfig.proxiedCache * 60
 				responseHeaders['Cache-Control'] = `public, max-age=${maxAgeSeconds}`
 			}
 
@@ -159,23 +199,20 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 			return
 		}
 
-		// STAGE 1: Early pathname cache read for likely non-static assets
-		// Read pathname cache early (enables reverse lookup before fetch)
-		pathnameMapping = await getPathnameMapping(cache, targetLang, originHostname)
-		pathnameSearched = true
-
-		// Attempt reverse lookup using fetched mapping
-		if (pathnameMapping) {
-			const resolved = lookupOriginalPathnameSync(pathnameMapping, incomingPathname)
-			if (resolved) {
-				originalPathname = resolved
+		// STAGE 1: Early pathname lookup for reverse URL resolution
+		const pathnameResult = await lookupPathname(hostConfig.hostId, incomingPathname)
+		if (pathnameResult) {
+			// If we found a match and the incoming path matches the translated path,
+			// use the original path for fetching
+			if (pathnameResult.translatedPath === incomingPathname) {
+				originalPathname = pathnameResult.originalPath
 			}
 		}
 
 		// Compute origin URL using resolved pathname
 		const fetchUrl = originBase + originalPathname + url.search
 
-		// 4. Fetch HTML from origin (segment cache read moved to after Content-Type check)
+		// 4. Fetch HTML from origin
 		let html: string
 
 		try {
@@ -251,12 +288,6 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 
 			// Handle non-HTML content (proxy)
 			if (!contentType.toLowerCase().includes('text/html')) {
-				// STAGE 2: Late pathname cache read for edge cases (non-HTML that passed isStaticAsset)
-				if (!pathnameSearched) {
-					pathnameMapping = await getPathnameMapping(cache, targetLang, originHostname)
-					pathnameSearched = true
-				}
-
 				// Proxy non-HTML resources with optional edge caching
 
 				// Clone origin headers, excluding encoding headers (Node's fetch auto-decompresses)
@@ -270,13 +301,13 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 
 				// Add Cache-Control header if proxiedCache is configured
 				const truncatedUrl = fetchUrl.length > 50 ? fetchUrl.substring(0, 50) + '...' : fetchUrl
-				if (hostSettings.proxiedCache && hostSettings.proxiedCache > 0) {
-					const maxAgeSeconds = hostSettings.proxiedCache * 60
+				if (hostConfig.proxiedCache && hostConfig.proxiedCache > 0) {
+					const maxAgeSeconds = hostConfig.proxiedCache * 60
 					proxyHeaders['Cache-Control'] = `public, max-age=${maxAgeSeconds}`
 
 					if (proxyLogging) {
 						console.log(
-							`▶ [${targetLang}] ${truncatedUrl} - Proxying with cache: ${contentType} (${hostSettings.proxiedCache}m)`
+							`▶ [${targetLang}] ${truncatedUrl} - Proxying with cache: ${contentType} (${hostConfig.proxiedCache}m)`
 						)
 					}
 				} else {
@@ -288,11 +319,8 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 				return
 			}
 
-			// NOW we know it's HTML - read segment cache
-			let cachedEntry = await getSegmentCache(cache, targetLang, originHostname)
-
 			// Initialize pathname updates accumulator for batch write at end
-			const pathnameUpdates: Array<{ original: string; translated: string }> = []
+			const pathnameUpdates: PathnameMapping[] = []
 
 			// Fetch HTML content for translation
 			const fetchResult = {
@@ -330,8 +358,8 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 				let patternData: PatternizedText[] = []
 				let normalizedSegments = extractedSegments
 
-				if (hostSettings.skipPatterns && hostSettings.skipPatterns.length > 0) {
-					patternData = extractedSegments.map((seg) => applyPatterns(seg.value, hostSettings.skipPatterns!))
+				if (hostConfig.skipPatterns && hostConfig.skipPatterns.length > 0) {
+					patternData = extractedSegments.map((seg) => applyPatterns(seg.value, hostConfig.skipPatterns!))
 					// Replace segment values with normalized versions
 					normalizedSegments = extractedSegments.map((seg, i) => ({
 						...seg,
@@ -346,14 +374,18 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 					}))
 				}
 
-				// 7. Match segments with cache (using normalized text)
-				const { cached, newSegments, newIndices } = await matchSegmentsWithCache(normalizedSegments, cachedEntry)
+				// 7. Batch lookup translations from database
+				const segmentTexts = normalizedSegments.map((s) => s.value)
+				const cachedTranslations = await batchGetTranslations(hostConfig.hostId, segmentTexts)
+
+				// Match segments with cache
+				const { cached, newSegments, newIndices } = matchSegmentsWithMap(normalizedSegments, cachedTranslations)
 
 				cachedHits = cached.size
 				cacheMisses = newSegments.length
 
 				// 8. Extract link pathnames early (before translation) for parallel processing
-				const linkPathnames = hostSettings.translatePath ? extractLinkPathnames(document, originHostname) : new Set<string>()
+				const linkPathnames = hostConfig.translatePath ? extractLinkPathnames(document, originHostname) : new Set<string>()
 
 				// 9. Translate segments and pathnames in parallel for maximum performance
 				const translateStart = Date.now()
@@ -361,7 +393,7 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 				// Create promises for parallel execution
 				const segmentPromise =
 					newSegments.length > 0
-						? translateSegments(newSegments, sourceLang, targetLang, GOOGLE_PROJECT_ID, OPENROUTER_API_KEY, hostSettings.skipWords)
+						? translateSegments(newSegments, sourceLang, targetLang, GOOGLE_PROJECT_ID, OPENROUTER_API_KEY, hostConfig.skipWords)
 						: Promise.resolve({ translations: [], uniqueCount: 0, batchCount: 0 })
 
 				// Pathname translation: batch current + links together for efficiency
@@ -372,7 +404,7 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 					let pathnameSegments: Content[] = []
 					let pathnameTranslations: string[] = []
 
-					if (!hostSettings.translatePath) {
+					if (!hostConfig.translatePath) {
 						return {
 							translatedPathname,
 							pathnameSegment,
@@ -385,7 +417,7 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 					try {
 						// Add current pathname to link pathnames for batching
 						const allPathnames = new Set(linkPathnames)
-						if (!shouldSkipPath(originalPathname, hostSettings.skipPath)) {
+						if (!shouldSkipPath(originalPathname, hostConfig.skipPath)) {
 							allPathnames.add(originalPathname)
 						}
 
@@ -398,6 +430,15 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 								pathnameTranslations,
 							}
 						}
+
+						// Lookup existing pathname translations from database
+						const existingPathnames = await batchLookupPathnames(hostConfig.hostId, Array.from(allPathnames))
+
+						// Build a PathnameMapping-like structure for translatePathnamesBatch
+						const pathnameMapping = existingPathnames.size > 0 ? {
+							origin: Object.fromEntries(existingPathnames),
+							translated: Object.fromEntries(Array.from(existingPathnames.entries()).map(([k, v]) => [v, k])),
+						} : null
 
 						// Translate all pathnames in one batch
 						const batchResult = await translatePathnamesBatch(
@@ -413,11 +454,11 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 									targetLang,
 									GOOGLE_PROJECT_ID,
 									OPENROUTER_API_KEY,
-									hostSettings.skipWords
+									hostConfig.skipWords
 								)
 								return result.translations
 							},
-							hostSettings.skipPath
+							hostConfig.skipPath
 						)
 
 						// Extract current pathname translation from batch results
@@ -487,25 +528,29 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 					appliedCount = applyTranslations(document, restoredTranslations, extractedSegments)
 					applyTime = Date.now() - applyStart
 
-					// 12. Update cache with new translations
+					// 12. Update database with new translations
 					storedCount = 0
-					const segmentsForCache = pathnameSegment ? [...newSegments, pathnameSegment] : newSegments
-					const translationsForCache = pathnameSegment
-						? [...newTranslations, translatedPathname]
-						: newTranslations
-					if (segmentsForCache.length > 0 && translationsForCache.length > 0) {
-						storedCount = await updateSegmentCache(
-							cache,
-							targetLang,
-							originHostname,
-							cachedEntry,
-							segmentsForCache,
-							translationsForCache
-						)
+					if (newSegments.length > 0 && newTranslations.length > 0) {
+						const translationItems: TranslationItem[] = newSegments.map((seg, i) => ({
+							original: seg.value,
+							translated: newTranslations[i],
+							kind: seg.kind as 'text' | 'attr' | 'path',
+						}))
+
+						// Add pathname translation if we have one
+						if (pathnameSegment && translatedPathname !== originalPathname) {
+							translationItems.push({
+								original: pathnameSegment.value,
+								translated: translatedPathname,
+								kind: 'path',
+							})
+						}
+
+						storedCount = await batchUpsertTranslations(hostConfig.hostId, translationItems)
 					}
 
 					// 13. Add current page pathname to batch (accumulate instead of immediate write)
-					if (hostSettings.translatePath && pathnameSegment && translatedPathname !== originalPathname) {
+					if (hostConfig.translatePath && pathnameSegment && translatedPathname !== originalPathname) {
 						const { normalized: normalizedOriginal } = normalizePathname(originalPathname)
 						const { normalized: normalizedTranslated } = normalizePathname(translatedPathname)
 
@@ -523,7 +568,7 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 						host,
 						originalPathname,
 						translatedPathname,
-						hostSettings.translatePath || false,
+						hostConfig.translatePath || false,
 						pathnameMap
 					)
 					rewriteTime = Date.now() - rewriteStart
@@ -556,7 +601,7 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 					}
 
 					// 15b. Add link pathnames to batch (accumulate instead of loop writes)
-					if (hostSettings.translatePath && pathnameSegments.length > 0) {
+					if (hostConfig.translatePath && pathnameSegments.length > 0) {
 						const linkUpdates = pathnameSegments.map((seg, i) => ({
 							original: seg.value,
 							translated: pathnameTranslations[i],
@@ -567,7 +612,7 @@ export async function handleRequest(req: Request, res: Response, cache: MemoryCa
 					// 15c. Batch write all pathname updates (current page + links) in single operation
 					if (pathnameUpdates.length > 0) {
 						try {
-							await batchUpdatePathnameMapping(cache, targetLang, originHostname, pathnameUpdates)
+							await batchUpsertPathnames(hostConfig.hostId, pathnameUpdates)
 						} catch (error) {
 							console.error('Pathname cache batch update failed:', error)
 							// Non-blocking - continue serving response

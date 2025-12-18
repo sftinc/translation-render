@@ -11,9 +11,11 @@
 	"dependencies": {
 		"@types/express": "^5.0.6",
 		"@types/node": "^22.15.30",
+		"@types/pg": "^8.16.0",
 		"dotenv": "^17.2.3",
 		"express": "^5.0.6",
 		"linkedom": "^0.18.12",
+		"pg": "^8.16.3",
 		"typescript": "^5.9.3"
 	},
 	"devDependencies": {

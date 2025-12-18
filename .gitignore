@@ -34,6 +34,5 @@ Thumbs.db
 npm-debug.log*
 
 # Test & Temporary Files
-db.md
 test-*.js
 *.bak

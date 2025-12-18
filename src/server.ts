@@ -5,10 +5,9 @@
 import 'dotenv/config'
 import express from 'express'
 import { handleRequest } from './index'
-import { MemoryCache } from './memory-cache'
+import { testConnection, closePool } from './db'
 
 const app = express()
-const cache = new MemoryCache()
 const PORT = process.env.PORT || 8787
 
 // Parse raw body for POST/PUT requests
@@ -17,7 +16,7 @@ app.use(express.raw({ type: '*/*', limit: '10mb' }))
 // Main request handler
 app.use(async (req, res) => {
 	try {
-		await handleRequest(req, res, cache)
+		await handleRequest(req, res)
 	} catch (error) {
 		console.error('Unhandled error:', error)
 		if (!res.headersSent) {
@@ -26,16 +25,33 @@ app.use(async (req, res) => {
 	}
 })
 
-// Periodic cache cleanup (every hour)
-setInterval(() => {
-	const removed = cache.cleanup()
-	if (removed > 0) {
-		console.log(`[Cache Cleanup] Removed ${removed} expired entries`)
-	}
-}, 60 * 60 * 1000)
-
-app.listen(PORT, () => {
-	console.log(`Translation proxy running on port ${PORT}`)
-	if (PORT === 8787) console.log(`http://localhost:${PORT}`)
-	console.log(`Cache initialized (in-memory)`)
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+	console.log('SIGTERM received, closing database pool...')
+	await closePool()
+	process.exit(0)
 })
+
+process.on('SIGINT', async () => {
+	console.log('SIGINT received, closing database pool...')
+	await closePool()
+	process.exit(0)
+})
+
+// Start server
+async function start() {
+	// Test database connection
+	const connected = await testConnection()
+	if (!connected) {
+		console.error('Failed to connect to PostgreSQL. Exiting.')
+		process.exit(1)
+	}
+	console.log('PostgreSQL connected')
+
+	app.listen(PORT, () => {
+		console.log(`Translation proxy running on port ${PORT}`)
+		if (PORT === 8787) console.log(`http://localhost:${PORT}`)
+	})
+}
+
+start()
