@@ -13,6 +13,11 @@ const PORT = process.env.PORT || 8787
 // Parse raw body for POST/PUT requests
 app.use(express.raw({ type: '*/*', limit: '10mb' }))
 
+// Health check endpoint
+app.get('/_pantolingo-proxy/health', (_req, res) => {
+	res.status(200).json({ status: 'ok' })
+})
+
 // Main request handler
 app.use(async (req, res) => {
 	try {
@@ -26,17 +31,14 @@ app.use(async (req, res) => {
 })
 
 // Graceful shutdown
-process.on('SIGTERM', async () => {
-	console.log('SIGTERM received, closing database pool...')
+const gracefulShutdown = async (signal: string) => {
+	console.log(`${signal} received, closing database pool...`)
 	await closePool()
 	process.exit(0)
-})
+}
 
-process.on('SIGINT', async () => {
-	console.log('SIGINT received, closing database pool...')
-	await closePool()
-	process.exit(0)
-})
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))
 
 // Start server
 async function start() {
