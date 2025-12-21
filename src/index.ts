@@ -122,6 +122,8 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 	const host = req.get('host') || ''
 	const url = new URL(req.originalUrl, `${protocol}://${host}`)
 
+	console.log(`URL: ${url.href}`)
+
 	try {
 		// 1. Parse request and determine target language from database
 		const hostConfig = await getHostConfig(host.startsWith('localhost') ? host.split(':')[0] : host)
@@ -385,7 +387,9 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 				cacheMisses = newSegments.length
 
 				// 8. Extract link pathnames early (before translation) for parallel processing
-				const linkPathnames = hostConfig.translatePath ? extractLinkPathnames(document, originHostname) : new Set<string>()
+				const linkPathnames = hostConfig.translatePath
+					? extractLinkPathnames(document, originHostname)
+					: new Set<string>()
 
 				// 9. Translate segments and pathnames in parallel for maximum performance
 				const translateStart = Date.now()
@@ -393,7 +397,14 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 				// Create promises for parallel execution
 				const segmentPromise =
 					newSegments.length > 0
-						? translateSegments(newSegments, sourceLang, targetLang, GOOGLE_PROJECT_ID, OPENROUTER_API_KEY, hostConfig.skipWords)
+						? translateSegments(
+								newSegments,
+								sourceLang,
+								targetLang,
+								GOOGLE_PROJECT_ID,
+								OPENROUTER_API_KEY,
+								hostConfig.skipWords
+						  )
 						: Promise.resolve({ translations: [], uniqueCount: 0, batchCount: 0 })
 
 				// Pathname translation: batch current + links together for efficiency
@@ -446,10 +457,15 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 
 						// Build a PathnameMapping-like structure for translatePathnamesBatch
 						// Keys are normalized paths (matching what translatePathnamesBatch looks up)
-						const pathnameMapping = existingPathnames.size > 0 ? {
-							origin: Object.fromEntries(existingPathnames),
-							translated: Object.fromEntries(Array.from(existingPathnames.entries()).map(([k, v]) => [v, k])),
-						} : null
+						const pathnameMapping =
+							existingPathnames.size > 0
+								? {
+										origin: Object.fromEntries(existingPathnames),
+										translated: Object.fromEntries(
+											Array.from(existingPathnames.entries()).map(([k, v]) => [v, k])
+										),
+								  }
+								: null
 
 						// Translate all pathnames in one batch
 						const batchResult = await translatePathnamesBatch(
@@ -526,11 +542,7 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 					// 10. Restore patterns before applying to DOM
 					const restoredTranslations = allTranslations.map((translation, i) => {
 						// Always call restorePatterns to ensure case formatting is applied even if no patterns
-						return restorePatterns(
-							translation,
-							patternData[i]?.replacements ?? [],
-							patternData[i]?.isUpperCase
-						)
+						return restorePatterns(translation, patternData[i]?.replacements ?? [], patternData[i]?.isUpperCase)
 					})
 
 					// 11. Apply translations to DOM
@@ -581,15 +593,7 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 
 					// 15a. Add lang attribute and hreflang links for SEO
 					try {
-						addLangMetadata(
-							document,
-							targetLang,
-							sourceLang,
-							host,
-							originHostname,
-							originalPathname,
-							url
-						)
+						addLangMetadata(document, targetLang, sourceLang, host, originHostname, originalPathname, url)
 					} catch (langError) {
 						console.error('[Lang Metadata] Failed:', langError)
 						// Non-blocking - continue serving response

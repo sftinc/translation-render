@@ -13,13 +13,6 @@ const PORT = process.env.PORT || 8787
 // Parse raw body for POST/PUT requests
 app.use(express.raw({ type: '*/*', limit: '10mb' }))
 
-// Check custom hostname acme challenge (french.esnipe.com)
-app.get('/.well-known/acme-challenge/UobRNprf7bzaWsIFPDBz6tiWcjZ5_02IaLyM5pTYSoAC89W-XGsnxGIuEs-zqxOb', (_req, res) => {
-	res.set('Content-Type', 'text/plain').send(
-		'UobRNprf7bzaWsIFPDBz6tiWcjZ5_02IaLyM5pTYSoAC89W-XGsnxGIuEs-zqxOb.r54qAqCZSs4xyyeamMffaxyR1FWYVb5OvwUh8EcrhpI'
-	)
-})
-
 // Health check endpoint
 app.get('/_pantolingo-proxy/health', (_req, res) => {
 	res.status(200).json({ status: 'ok' })
