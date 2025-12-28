@@ -25,13 +25,19 @@ WHERE NOT EXISTS (
     WHERE ops.origin_segment_id = ts.origin_segment_id
 );
 
--- Uncomment to execute deletion:
--- BEGIN;
--- DELETE FROM origin_segment
--- WHERE id NOT IN (SELECT origin_segment_id FROM origin_path_segment);
--- COMMIT;
 
--- Verify after deletion:
--- SELECT 'Remaining origin_segments' as description, COUNT(*) FROM origin_segment
--- UNION ALL SELECT 'Remaining translated_segments', COUNT(*) FROM translated_segment
--- UNION ALL SELECT 'origin_path_segment links', COUNT(*) FROM origin_path_segment;
+-- ------------------------------------------------------------
+-- CLEANUP (run after verification - DO NOT run automatically)
+-- ------------------------------------------------------------
+
+-- ALTER TABLE pathname_translation_old RENAME TO _old_pathname_translation_v1;
+-- ALTER TABLE translation RENAME TO _old_translation;
+-- ALTER TABLE pathname RENAME TO _old_pathname;
+
+-- ALTER TABLE pathname_translation RENAME TO _old_pathname_translation;
+
+-- DROP TABLE IF EXISTS _old_pathname_translation_v1;
+-- DROP TABLE IF EXISTS _old_translation;
+-- DROP TABLE IF EXISTS _old_pathname;
+
+-- DROP TABLE IF EXISTS _old_pathname_translation;
