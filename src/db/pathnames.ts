@@ -26,6 +26,15 @@ export interface PathnameMapping {
 }
 
 /**
+ * Path IDs returned from batch upsert
+ * Contains both origin and translated IDs for junction table linking
+ */
+export interface PathIds {
+	originPathId: number
+	translatedPathId: number
+}
+
+/**
  * Bidirectional pathname lookup
  * Looks up by BOTH path (forward) and translated_path (reverse)
  *
@@ -125,7 +134,7 @@ export async function batchLookupPathnames(
  * @param originId - Origin ID
  * @param lang - Target language code
  * @param mappings - Array of { original, translated } pairs
- * @returns Map of path -> translated_path.id
+ * @returns Map of path -> { originPathId, translatedPathId }
  *
  * SQL: 2 queries - one for origin_path, one for translated_path
  */
@@ -133,7 +142,7 @@ export async function batchUpsertPathnames(
 	originId: number,
 	lang: string,
 	mappings: PathnameMapping[]
-): Promise<Map<string, number>> {
+): Promise<Map<string, PathIds>> {
 	if (mappings.length === 0) {
 		return new Map()
 	}
@@ -164,21 +173,24 @@ export async function batchUpsertPathnames(
 		)
 
 		// Step 2: Upsert translated_path (translations)
-		const result = await pool.query<{ id: number; path: string }>(
+		const result = await pool.query<{ id: number; origin_path_id: number; path: string }>(
 			`INSERT INTO translated_path (origin_id, lang, origin_path_id, translated_path, hit_count)
 			SELECT $1, $2, op.id, t.translated, 1
 			FROM unnest($3::text[], $4::text[]) AS t(original, translated)
 			JOIN origin_path op ON op.origin_id = $1 AND op.path = t.original
 			ON CONFLICT (origin_path_id, lang)
 			DO UPDATE SET hit_count = translated_path.hit_count + 1
-			RETURNING id, (SELECT path FROM origin_path WHERE id = origin_path_id) AS path`,
+			RETURNING id, origin_path_id, (SELECT path FROM origin_path WHERE id = origin_path_id) AS path`,
 			[originId, lang, originals, translated]
 		)
 
-		// Return map: path -> id
-		const idMap = new Map<string, number>()
+		// Return map: path -> { originPathId, translatedPathId }
+		const idMap = new Map<string, PathIds>()
 		for (const row of result.rows) {
-			idMap.set(row.path, row.id)
+			idMap.set(row.path, {
+				originPathId: row.origin_path_id,
+				translatedPathId: row.id,
+			})
 		}
 		return idMap
 	} catch (error) {

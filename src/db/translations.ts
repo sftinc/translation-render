@@ -179,3 +179,41 @@ export async function batchGetTranslationIds(
 		return new Map() // Fail open
 	}
 }
+
+/**
+ * Batch lookup origin segment IDs by text hash
+ * Used to link origin segments to origin paths (language-independent)
+ *
+ * @param originId - Origin ID
+ * @param textHashes - Array of text hashes to look up
+ * @returns Map of text_hash -> origin_segment.id
+ *
+ * SQL: 1 query on origin_segment
+ */
+export async function batchGetOriginSegmentIds(
+	originId: number,
+	textHashes: string[]
+): Promise<Map<string, number>> {
+	if (textHashes.length === 0) {
+		return new Map()
+	}
+
+	try {
+		const result = await pool.query<{ text_hash: string; id: number }>(
+			`SELECT text_hash, id
+			FROM origin_segment
+			WHERE origin_id = $1
+			  AND text_hash = ANY($2::text[])`,
+			[originId, textHashes]
+		)
+
+		const idMap = new Map<string, number>()
+		for (const row of result.rows) {
+			idMap.set(row.text_hash, row.id)
+		}
+		return idMap
+	} catch (error) {
+		console.error('DB origin segment ID lookup failed:', error)
+		return new Map() // Fail open
+	}
+}

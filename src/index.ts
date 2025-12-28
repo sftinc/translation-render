@@ -27,11 +27,12 @@ import {
 	batchGetTranslations,
 	batchUpsertTranslations,
 	batchUpsertPathnames,
-	batchGetTranslationIds,
-	linkPathnameTranslations,
+	batchGetOriginSegmentIds,
+	linkPathSegments,
 	hashText,
 	type TranslationItem,
 	type PathnameMapping,
+	type PathIds,
 } from './db'
 
 // Control console logging
@@ -607,7 +608,7 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 					}
 
 					// 15c. Batch write all pathname updates (current page + links) in single operation
-					let pathnameIdMap = new Map<string, number>()
+					let pathnameIdMap = new Map<string, PathIds>()
 					if (pathnameUpdates.length > 0) {
 						try {
 							pathnameIdMap = await batchUpsertPathnames(hostConfig.originId, hostConfig.targetLang, pathnameUpdates)
@@ -617,35 +618,33 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 						}
 					}
 
-					// 16. Link translations to current pathname in junction table
-					// TODO: After backfill complete, switch to linking only new translations
-					// by using the translation ID map from batchUpsertTranslations directly.
-					// This saves 1 query per page load.
-					if (normalizedSegments.length > 0) {
+					// 16. Link NEW segments to current pathname in junction table (language-independent)
+					// Only link segments that were just translated (cache misses), not cached ones
+					if (newSegments.length > 0) {
 						try {
 							const { normalized: normalizedPath } = normalizePathname(originalPathname)
-							let currentPathnameId = pathnameIdMap.get(normalizedPath)
+							let pathIds = pathnameIdMap.get(normalizedPath)
 
 							// Ensure current pathname exists in DB (it may not be in pathnameIdMap
 							// if translatePath is disabled or path didn't change, e.g., "/" → "/")
-							if (!currentPathnameId) {
+							if (!pathIds) {
 								const currentPathResult = await batchUpsertPathnames(hostConfig.originId, hostConfig.targetLang, [
 									{ original: normalizedPath, translated: normalizedPath },
 								])
-								currentPathnameId = currentPathResult.get(normalizedPath)
+								pathIds = currentPathResult.get(normalizedPath)
 							}
 
-							if (currentPathnameId) {
-								// Get ALL translation IDs (cached + new) for this page
-								const allHashes = normalizedSegments.map((s) => hashText(s.value))
-								const allTranslationIds = await batchGetTranslationIds(hostConfig.originId, hostConfig.targetLang, allHashes)
+							if (pathIds?.originPathId) {
+								// Get origin segment IDs only for NEW segments (just translated)
+								const newHashes = newSegments.map((s) => hashText(s.value))
+								const originSegmentIds = await batchGetOriginSegmentIds(hostConfig.originId, newHashes)
 
-								if (allTranslationIds.size > 0) {
-									await linkPathnameTranslations(currentPathnameId, Array.from(allTranslationIds.values()))
+								if (originSegmentIds.size > 0) {
+									await linkPathSegments(pathIds.originPathId, Array.from(originSegmentIds.values()))
 								}
 							}
 						} catch (error) {
-							console.error('Failed to link pathname translations:', error)
+							console.error('Failed to link path segments:', error)
 							// Non-blocking - continue serving response
 						}
 					}
