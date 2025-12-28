@@ -8,7 +8,7 @@
  */
 
 import { pool } from './pool'
-import { hashText } from './hash'
+import { hashText } from '../utils/hash'
 
 /**
  * Translation item for batch upsert
