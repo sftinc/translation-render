@@ -124,7 +124,7 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 	const url = new URL(req.originalUrl, `${protocol}://${host}`)
 
 	// Whitelist host: translate.pantolingo.com
-	if (host === 'translate.pantolingo.com') {
+	if (host === 'translate.pantolingo.com' || host === 'pantolingo-translate.onrender.com') {
 		res.status(200).json({ status: 'ok' })
 		return
 	}
