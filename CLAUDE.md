@@ -8,87 +8,129 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **Node.js/Express translation proxy** that translates websites on-the-fly. It proxies requests to an origin server, translates the HTML content, and serves it with translated URLs and link rewriting. Translations are persisted in PostgreSQL.
+Pantolingo is a **pnpm monorepo** with two applications and a shared database package:
+
+- **`apps/translate`**: Translation proxy (Express) that translates websites on-the-fly
+- **`apps/www`**: Customer-facing website (Next.js) for managing translation domains
+- **`packages/db`**: Shared PostgreSQL database layer
 
 **Core Use Case**: Host translated versions of a website on different domains (e.g., `es.esnipe.com` for Spanish, `fr.esnipe.com` for French) without maintaining separate codebases.
+
+## Monorepo Structure
+
+```
+pantolingo/
+├── apps/
+│   ├── translate/              # Translation proxy (Express)
+│   │   ├── src/
+│   │   │   ├── server.ts       # Express entry point
+│   │   │   ├── index.ts        # Main request handler
+│   │   │   ├── config.ts       # Constants and fallback config
+│   │   │   ├── fetch/          # DOM manipulation pipeline
+│   │   │   └── translation/    # Translation engine
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   │
+│   └── www/                    # Customer website (Next.js)
+│       ├── src/app/
+│       │   ├── (marketing)/    # Public pages (/, /pricing, /contact, /rtc)
+│       │   ├── (auth)/         # Auth pages (/login, /signup)
+│       │   └── (dashboard)/    # Customer dashboard (/dashboard)
+│       ├── package.json
+│       └── tsconfig.json
+│
+├── packages/
+│   └── db/                     # Shared database layer
+│       ├── src/
+│       │   ├── pool.ts         # PostgreSQL connection pool
+│       │   ├── host.ts         # Host configuration queries
+│       │   ├── segments.ts     # Translation segment queries
+│       │   ├── paths.ts        # URL path mapping queries
+│       │   ├── junctions.ts    # Junction table queries
+│       │   └── utils/hash.ts   # Text hashing utility
+│       ├── package.json
+│       └── tsconfig.json
+│
+├── dev/postgres/               # Database schema files
+├── package.json                # Root workspace config
+├── pnpm-workspace.yaml         # pnpm workspace definition
+└── tsconfig.base.json          # Shared TypeScript config
+```
 
 ## Development Commands
 
 ```bash
-# Local development (runs with tsx watch for hot reloading)
-npm run dev
+# Install all dependencies
+pnpm install
 
-# Build for production (installs deps + TypeScript compilation)
-npm run build
+# Run all apps in development (parallel)
+pnpm dev
 
-# Start production server
-npm run start
+# Run individual apps
+pnpm dev:translate    # Translation proxy on :8787
+pnpm dev:www          # Next.js website on :3000
+
+# Build all packages and apps
+pnpm build
+
+# Build individual apps
+pnpm build:translate
+pnpm build:www
+
+# Start all apps in production mode
+pnpm start
+
+# Start individual apps
+pnpm start:translate
+pnpm start:www
 ```
 
 ## Architecture
 
-### Request Pipeline
+### Translation Proxy (`apps/translate`)
 
-The server processes each request through this pipeline (see [index.ts](src/index.ts)):
+The translation proxy processes each request through this pipeline:
 
 **Cache → Fetch → Parse → Extract → Translate → Apply → Rewrite → Return**
 
 **Key Flow**:
 
--   Requests hit Express → Host determines target language from database (`host` table)
--   Static assets (`.js`, `.css`, `.png`, etc.) are proxied directly with optional caching
--   HTML content flows through the full translation pipeline
--   PostgreSQL stores: host configuration, translations, and pathname mappings
+- Requests hit Express → Host determines target language from database (`host` table)
+- Static assets (`.js`, `.css`, `.png`, etc.) are proxied directly with optional caching
+- HTML content flows through the full translation pipeline
+- PostgreSQL stores: host configuration, translations, and pathname mappings
 
-### Core Modules
+**Core Modules**:
 
-**[src/server.ts](src/server.ts)** - Express server entry point
+- `server.ts`: Express server entry point, database connection
+- `index.ts`: Main request handler, orchestrates the pipeline
+- `config.ts`: Constants and fallback configuration
+- `fetch/`: DOM manipulation (parsing, extraction, application, rewriting)
+- `translation/`: Translation engine (OpenRouter API, deduplication, patterns)
 
--   Creates Express app and tests database connection on startup
--   Routes all requests through `handleRequest()`
--   Graceful shutdown closes database pool
+### Shared Database Package (`packages/db`)
 
-**[src/index.ts](src/index.ts)** - Main request handler
+Provides PostgreSQL queries and utilities used by both apps:
 
--   Orchestrates the entire request pipeline
--   Handles redirects (rewrites `Location` headers to translated domains)
--   Manages parallel translation of segments + pathnames
--   Performance logging with timing breakdowns
+- `pool.ts`: Connection pool with lazy initialization (uses Proxy to defer pool creation until first query, ensuring env vars are loaded)
+- `host.ts`: Host configuration queries with in-memory caching
+- `segments.ts`: Batch get/upsert translations with hash-based lookups
+- `paths.ts`: Bidirectional URL mapping storage
+- `junctions.ts`: Junction table linking translations to pathnames
+- `utils/hash.ts`: SHA-256 hashing for text lookups
 
-**[src/config.ts](src/config.ts)** - Constants and fallback configuration
+**Usage in apps**:
+```typescript
+import { getHostConfig, batchGetTranslations } from '@pantolingo/db'
+```
 
--   `HOST_SETTINGS`: Fallback config (primary config comes from database)
--   `SKIP_SELECTORS` / `SKIP_TAGS`: DOM elements to skip during extraction
--   `TRANSLATE_ATTRS`: Attributes to translate (`title`, `placeholder`, `aria-label`, `alt`)
+### Customer Website (`apps/www`)
 
-**[src/db/](src/db/)** - PostgreSQL database layer
+Next.js 16 app with Tailwind CSS v4. Placeholder pages (to be implemented):
 
--   `pool.ts`: Connection pool with SSL support for Render
--   `host.ts`: Host configuration queries (replaces `HOST_SETTINGS` lookup)
--   `segments.ts`: Batch get/upsert translations with hash-based lookups
--   `paths.ts`: Bidirectional URL mapping storage
--   `junctions.ts`: Junction table linking translations to pathnames
-
-**[src/utils/](src/utils/)** - Utility functions
-
--   `hash.ts`: Text hashing for efficient lookups
-
-**[src/fetch/](src/fetch/)** - DOM manipulation pipeline
-
--   `dom-parser.ts`: HTML parsing with linkedom
--   `dom-extractor.ts`: Extracts translatable segments (text nodes, attributes, link pathnames)
--   `dom-applicator.ts`: Applies translations back to DOM elements
--   `dom-rewriter.ts`: Rewrites internal links to translated domains/paths
--   `dom-metadata.ts`: Adds SEO metadata (`<html lang>`, `<link hreflang>`)
-
-**[src/translation/](src/translation/)** - Translation engine
-
--   `translate.ts`: OpenRouter API integration (model: `anthropic/claude-haiku-4.5`)
--   `prompts.ts`: Translation prompts for segments and pathnames
--   `translate-segments.ts`: Deduplication + batch optimization
--   `translate-pathnames.ts`: URL-safe pathname translation with normalization
--   `skip-patterns.ts`: Pattern replacement for PII/numbers (e.g., `"123.00"` → `"[N1]"`)
--   `skip-words.ts`: Protects brand names from translation
+- Marketing pages: `/`, `/pricing`, `/contact`, `/rtc`
+- Auth pages: `/login`, `/signup`
+- Dashboard: `/dashboard`
 
 ### Database Schema
 
@@ -96,75 +138,59 @@ Schema file: [dev/postgres/pg-schema.sql](dev/postgres/pg-schema.sql)
 
 **Tables** (origin-scoped model):
 
--   `origin`: Origin websites (domain, source language)
--   `host`: Translated domains (hostname, target language, config options)
--   `origin_segment`: Source text segments scoped to origin (text, text_hash)
--   `translated_segment`: Translations scoped to origin + language
--   `origin_path`: Source URL paths scoped to origin
--   `translated_path`: Translated URL paths scoped to origin + language
--   `origin_path_segment`: Junction linking paths to segments (for cache invalidation)
-
-**Key relationships**:
-
--   `host` → `origin`: Many translated hosts per origin
--   `origin_segment` → `origin`: Text segments shared across all languages for an origin
--   `translated_segment` → `origin_segment`: One translation per language per segment
--   `origin_path` → `origin`: URL paths shared across all languages
--   `translated_path` → `origin_path`: One translated path per language
-
-### Translation Optimization
-
-**Deduplication flow** ([src/translation/deduplicator.ts](src/translation/deduplicator.ts)):
-
-1. Extract N segments from page
-2. Deduplicate → unique strings
-3. Batch lookup from database → split into cached vs new
-4. Translate only new unique strings (parallel API calls)
-5. Expand back to original positions
-
-**Pattern System** ([src/translation/skip-patterns.ts](src/translation/skip-patterns.ts)):
-
--   `numeric`: Numbers (e.g., `123.00` → `[N1]`)
--   `pii`: Email addresses (e.g., `user@example.com` → `[P1]`)
--   Patterns applied before translation, restored after
+- `origin`: Origin websites (domain, source language)
+- `host`: Translated domains (hostname, target language, config options)
+- `origin_segment`: Source text segments scoped to origin (text, text_hash)
+- `translated_segment`: Translations scoped to origin + language
+- `origin_path`: Source URL paths scoped to origin
+- `translated_path`: Translated URL paths scoped to origin + language
+- `origin_path_segment`: Junction linking paths to segments (for cache invalidation)
 
 ### Environment Variables
 
+**Important**: The `.env` file must be at the **monorepo root** (not in individual app directories). The translate app explicitly loads from `../../.env` relative to its source directory.
+
 Required:
 
--   `POSTGRES_DB_URL`: PostgreSQL connection string
--   `OPENROUTER_API_KEY`: OpenRouter API key for translation
+- `POSTGRES_DB_URL`: PostgreSQL connection string
+- `OPENROUTER_API_KEY`: OpenRouter API key for translation
 
 Optional:
 
--   `PORT`: Server port (defaults to 8787)
+- `PORT`: Server port (defaults to 8787)
 
-### Key Implementation Details
-
-**Host configuration** comes from database via `getHostConfig()`:
-
--   In-memory cache with 60-second TTL to avoid repeated queries
--   Falls back to null if host not found (returns 404)
-
-**Pathname translation** is optional per-host (`translate_path` column):
-
--   When enabled: Translates `/pricing` → `/precios` (URL-safe, ASCII-only output)
--   Always supports reverse lookup to handle bookmarked translated URLs
--   Skip paths via regex or prefix patterns stored in `skip_path` array
-
-**Link rewriting** ([src/fetch/dom-rewriter.ts](src/fetch/dom-rewriter.ts)):
-
--   Rewrites `<a href>` to point to translated domain
--   Uses pathname cache for translated URLs
--   Preserves query strings and fragments
+See [.env.example](.env.example) for all variables.
 
 ## Deployment (Render.com)
 
-1. Push code to Git repository
-2. Create PostgreSQL database on Render
-3. Create Web Service with environment variables:
-    - `POSTGRES_DB_URL`: Internal database URL from Render
-    - `OPENROUTER_API_KEY`: Your API key
-4. Build command: `npm run build`
-5. Start command: `npm run start`
-6. Run [dev/postgres/pg-schema.sql](dev/postgres/pg-schema.sql) to create tables
+Each app deploys as a separate Render service. Both apps share the same PostgreSQL database.
+`packages/db` is not deployed — it's bundled into each app.
+
+**For pnpm monorepos**, keep Root Directory empty (repo root) and use Build Filters:
+
+### Translation Proxy (`apps/translate`)
+
+1. Go to Render dashboard → translate service → Settings
+2. **Root Directory**: (leave empty - uses repo root)
+3. **Build command**: `pnpm install && pnpm build:translate`
+4. **Start command**: `node apps/translate/dist/server.js`
+5. **Build Filters** (Settings → Build & Deploy → Build Filters):
+   - Include paths: `apps/translate/**`, `packages/db/**`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`
+
+### Customer Website (`apps/www`)
+
+1. Create new Web Service in Render
+2. Connect to same repository
+3. **Root Directory**: (leave empty - uses repo root)
+4. **Build command**: `pnpm install && pnpm build:www`
+5. **Start command**: `pnpm start:www`
+6. **Build Filters**:
+   - Include paths: `apps/www/**`, `packages/db/**`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`
+7. Add environment variables (`POSTGRES_DB_URL`, etc.)
+
+## Future Considerations (not yet implemented)
+
+- Authentication system for `apps/www`
+- User/account tables in database
+- Multi-tenancy: `user_id` foreign key on `origin` and `host` tables
+- Billing integration
