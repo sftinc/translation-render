@@ -1,28 +1,31 @@
-services:
-  # Translation Proxy (Express)
-  - type: web
-    name: pantolingo-translate
-    runtime: node
-    buildCommand: pnpm install && pnpm build:translate
-    startCommand: node apps/translate/dist/server.js
-    buildFilter:
-      paths:
-        - apps/translate/**
-        - packages/db/**
-        - package.json
-        - pnpm-lock.yaml
-        - pnpm-workspace.yaml
+version: '1'
+projects:
+    - name: Pantolingo
+      environments:
+          - name: Production
+            services:
+                - type: web
+                  name: pantolingo-translate
+                  runtime: node
+                  buildCommand: pnpm install && pnpm build:translate
+                  startCommand: pnpm start:translate
+                  buildFilter:
+                      paths:
+                          - apps/translate/**
+                          - packages/db/**
+                          - package.json
+                          - pnpm-lock.yaml
+                          - pnpm-workspace.yaml
 
-  # Customer Website (Next.js)
-  - type: web
-    name: pantolingo-www
-    runtime: node
-    buildCommand: pnpm install && pnpm build:www
-    startCommand: pnpm start:www
-    buildFilter:
-      paths:
-        - apps/www/**
-        - packages/db/**
-        - package.json
-        - pnpm-lock.yaml
-        - pnpm-workspace.yaml
+                - type: web
+                  name: pantolingo-www
+                  runtime: node
+                  buildCommand: pnpm install && pnpm build:www
+                  startCommand: pnpm start:www
+                  buildFilter:
+                      paths:
+                          - apps/www/**
+                          - packages/db/**
+                          - package.json
+                          - pnpm-lock.yaml
+                          - pnpm-workspace.yaml
