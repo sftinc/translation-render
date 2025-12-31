@@ -6,8 +6,8 @@
 		"dev:translate": "pnpm --filter @pantolingo/translate dev",
 		"dev:www": "pnpm --filter @pantolingo/www dev",
 		"build": "pnpm -r build",
-		"build:translate": "pnpm install && pnpm --filter @pantolingo/translate... build",
-		"build:www": "pnpm install && pnpm --filter @pantolingo/www... build",
+		"build:translate": "pnpm --filter @pantolingo/translate... build",
+		"build:www": "pnpm --filter @pantolingo/www... build",
 		"start": "pnpm --parallel -r start",
 		"start:translate": "pnpm --filter @pantolingo/translate start",
 		"start:www": "pnpm --filter @pantolingo/www start"
