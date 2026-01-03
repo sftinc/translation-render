@@ -1,35 +1,6 @@
 import { pool } from './pool.js'
 
 /**
- * Get or create an origin_path and return its ID.
- * Used for page view tracking where we need the ID even if path exists.
- */
-export async function getOrCreateOriginPathId(
-	originId: number,
-	path: string
-): Promise<number | null> {
-	try {
-		// Insert if not exists, then select
-		await pool.query(
-			`INSERT INTO origin_path (origin_id, path)
-			 VALUES ($1, $2)
-			 ON CONFLICT (origin_id, path) DO NOTHING`,
-			[originId, path]
-		)
-
-		const result = await pool.query<{ id: number }>(
-			`SELECT id FROM origin_path WHERE origin_id = $1 AND path = $2`,
-			[originId, path]
-		)
-
-		return result.rows[0]?.id ?? null
-	} catch (error) {
-		console.error('Failed to get/create origin_path:', error)
-		return null
-	}
-}
-
-/**
  * Record a page view for an origin path + language combination.
  * Increments hit_count if already exists for today, otherwise inserts.
  * Non-blocking - errors are logged but don't throw.

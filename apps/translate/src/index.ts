@@ -31,14 +31,69 @@ import {
 	batchGetOriginSegmentIds,
 	linkPathSegments,
 	hashText,
-	getOrCreateOriginPathId,
 	recordPageView,
 	updateSegmentLastUsed,
 	updatePathLastUsed,
 	type TranslationItem,
 	type PathnameMapping,
-	type PathIds,
 } from '@pantolingo/db'
+
+/**
+ * Deferred database writes - executed after response is sent
+ */
+interface DeferredWrites {
+	originId: number
+	lang: string
+	translations: TranslationItem[]
+	pathnames: PathnameMapping[]
+	currentPath: string
+	newSegmentHashes: string[]
+	cachedSegmentHashes: string[]
+	cachedPaths: string[]
+}
+
+/**
+ * Execute deferred database writes after response is sent
+ * All operations are non-blocking and errors are logged but don't affect the response
+ */
+async function executeDeferredWrites(writes: DeferredWrites): Promise<void> {
+	const { originId, lang, translations, pathnames, currentPath, newSegmentHashes, cachedSegmentHashes, cachedPaths } =
+		writes
+
+	try {
+		// 1. Upsert translations (cache for future requests)
+		if (translations.length > 0) {
+			await batchUpsertTranslations(originId, lang, translations)
+		}
+
+		// 2. Upsert pathnames (always includes current path) and get IDs
+		const pathnameIdMap = await batchUpsertPathnames(originId, lang, pathnames)
+
+		// 3. Link new segments to current path
+		const pathIds = pathnameIdMap.get(currentPath)
+		if (pathIds?.originPathId && newSegmentHashes.length > 0) {
+			const originSegmentIds = await batchGetOriginSegmentIds(originId, newSegmentHashes)
+			if (originSegmentIds.size > 0) {
+				await linkPathSegments(pathIds.originPathId, Array.from(originSegmentIds.values()))
+			}
+		}
+
+		// 4. Record page view
+		if (pathIds?.originPathId) {
+			recordPageView(pathIds.originPathId, lang)
+		}
+
+		// 5. Update last_used_at for cached items (fire-and-forget)
+		if (cachedSegmentHashes.length > 0) {
+			updateSegmentLastUsed(originId, lang, cachedSegmentHashes)
+		}
+		if (cachedPaths.length > 0) {
+			updatePathLastUsed(originId, lang, cachedPaths)
+		}
+	} catch (error) {
+		console.error('Deferred DB writes failed:', error)
+	}
+}
 
 // Control console logging
 const redirectLogging = false // redirects
@@ -128,7 +183,8 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 	const host = req.get('x-forwarded-host') || req.get('host') || ''
 	const url = new URL(req.originalUrl, `${protocol}://${host}`)
 
-	console.log(`URL: ${url.href}`)
+	// Keep for debugging
+	// console.log(`URL: ${url.href}`)
 
 	try {
 		// 1. Parse request and determine target language from database
@@ -340,8 +396,18 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 				return
 			}
 
-			// Initialize pathname updates accumulator for batch write at end
-			const pathnameUpdates: PathnameMapping[] = []
+			// Initialize deferred writes - will be executed after response is sent
+			const { normalized: normalizedCurrentPath } = normalizePathname(originalPathname)
+			const deferredWrites: DeferredWrites = {
+				originId: hostConfig.originId,
+				lang: hostConfig.targetLang,
+				translations: [],
+				pathnames: [{ original: normalizedCurrentPath, translated: normalizedCurrentPath }], // Always include current path
+				currentPath: normalizedCurrentPath,
+				newSegmentHashes: [],
+				cachedSegmentHashes: [],
+				cachedPaths: [],
+			}
 
 			// Fetch HTML content for translation
 			const fetchResult = {
@@ -402,10 +468,9 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 				cachedHits = cached.size
 				cacheMisses = newSegments.length
 
-				// Update last_used_at for cached segments (fire-and-forget)
+				// Collect cached segment hashes for deferred last_used_at update
 				if (cachedTranslations.size > 0) {
-					const cachedHashes = Array.from(cachedTranslations.keys()).map((text) => hashText(text))
-					updateSegmentLastUsed(hostConfig.originId, hostConfig.targetLang, cachedHashes)
+					deferredWrites.cachedSegmentHashes = Array.from(cachedTranslations.keys()).map((text) => hashText(text))
 				}
 
 				// 8. Extract link pathnames early (before translation) for parallel processing
@@ -481,13 +546,9 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 							normalizedPaths
 						)
 
-						// Update last_used_at for cached paths (fire-and-forget)
+						// Collect cached paths for deferred last_used_at update
 						if (existingPathnames.size > 0) {
-							updatePathLastUsed(
-								hostConfig.originId,
-								hostConfig.targetLang,
-								Array.from(existingPathnames.keys())
-							)
+							deferredWrites.cachedPaths = Array.from(existingPathnames.keys())
 						}
 
 						// Build a PathnameMapping-like structure for translatePathnamesBatch
@@ -583,9 +644,9 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 					// 11. Apply translations to DOM
 					applyTranslations(document, restoredTranslations, extractedSegments)
 
-					// 12. Update database with new translations
+					// 12. Collect translations for deferred write
 					if (newSegments.length > 0 && newTranslations.length > 0) {
-						const translationItems: TranslationItem[] = newSegments.map((seg, i) => ({
+						deferredWrites.translations = newSegments.map((seg, i) => ({
 							original: seg.value,
 							translated: newTranslations[i],
 						}))
@@ -593,24 +654,24 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 						// Add pathname translation if we have one (store normalized versions)
 						if (pathnameSegment && translatedPathname !== originalPathname) {
 							const { normalized: normalizedTranslatedPath } = normalizePathname(translatedPathname)
-							translationItems.push({
+							deferredWrites.translations.push({
 								original: pathnameSegment.value,
 								translated: normalizedTranslatedPath,
 							})
 						}
 
-						await batchUpsertTranslations(hostConfig.originId, hostConfig.targetLang, translationItems)
+						// Collect new segment hashes for path-segment linking
+						deferredWrites.newSegmentHashes = newSegments.map((s) => hashText(s.value))
 					}
 
-					// 13. Add current page pathname to batch (accumulate instead of immediate write)
+					// 13. Update current page pathname if it was translated
 					if (hostConfig.translatePath && pathnameSegment && translatedPathname !== originalPathname) {
-						const { normalized: normalizedOriginal } = normalizePathname(originalPathname)
 						const { normalized: normalizedTranslated } = normalizePathname(translatedPathname)
-
-						pathnameUpdates.push({
-							original: normalizedOriginal,
+						// Update the current path entry with the translated version
+						deferredWrites.pathnames[0] = {
+							original: deferredWrites.currentPath,
 							translated: normalizedTranslated,
-						})
+						}
 					}
 
 					// 14. Rewrite links
@@ -632,63 +693,14 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 						// Non-blocking - continue serving response
 					}
 
-					// 15b. Add link pathnames to batch (accumulate instead of loop writes)
+					// 15b. Collect link pathnames for deferred write
 					if (hostConfig.translatePath && pathnameSegments.length > 0) {
 						const linkUpdates = pathnameSegments.map((seg, i) => ({
 							original: seg.value,
 							translated: pathnameTranslations[i],
 						}))
-						pathnameUpdates.push(...linkUpdates)
+						deferredWrites.pathnames.push(...linkUpdates)
 					}
-
-					// 15c. Batch write all pathname updates (current page + links) in single operation
-					let pathnameIdMap = new Map<string, PathIds>()
-					if (pathnameUpdates.length > 0) {
-						try {
-							pathnameIdMap = await batchUpsertPathnames(
-								hostConfig.originId,
-								hostConfig.targetLang,
-								pathnameUpdates
-							)
-						} catch (error) {
-							console.error('Pathname cache batch update failed:', error)
-							// Non-blocking - continue serving response
-						}
-					}
-
-					// 16. Link NEW segments to current pathname in junction table (language-independent)
-					// Only link segments that were just translated (cache misses), not cached ones
-					if (newSegments.length > 0) {
-						try {
-							const { normalized: normalizedPath } = normalizePathname(originalPathname)
-							let pathIds = pathnameIdMap.get(normalizedPath)
-
-							// Ensure current pathname exists in DB (it may not be in pathnameIdMap
-							// if translatePath is disabled or path didn't change, e.g., "/" → "/")
-							if (!pathIds) {
-								const currentPathResult = await batchUpsertPathnames(
-									hostConfig.originId,
-									hostConfig.targetLang,
-									[{ original: normalizedPath, translated: normalizedPath }]
-								)
-								pathIds = currentPathResult.get(normalizedPath)
-							}
-
-							if (pathIds?.originPathId) {
-								// Get origin segment IDs only for NEW segments (just translated)
-								const newHashes = newSegments.map((s) => hashText(s.value))
-								const originSegmentIds = await batchGetOriginSegmentIds(hostConfig.originId, newHashes)
-
-								if (originSegmentIds.size > 0) {
-									await linkPathSegments(pathIds.originPathId, Array.from(originSegmentIds.values()))
-								}
-							}
-						} catch (error) {
-							console.error('Failed to link path segments:', error)
-							// Non-blocking - continue serving response
-						}
-					}
-
 				} catch (translationError) {
 					// Translation failed - return original HTML with debug header
 					console.error('Translation error, returning original HTML:', translationError)
@@ -699,19 +711,6 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 						.send(fetchResult.html)
 					return
 				}
-			}
-
-			// Record page view for all HTML pages (non-blocking, fire-and-forget)
-			try {
-				const { normalized: normalizedPath } = normalizePathname(originalPathname)
-				const originPathId = await getOrCreateOriginPathId(hostConfig.originId, normalizedPath)
-
-				if (originPathId) {
-					recordPageView(originPathId, hostConfig.targetLang)
-				}
-			} catch (error) {
-				console.error('Failed to record page view:', error)
-				// Non-blocking - continue serving response
 			}
 
 			// Serialize final HTML
@@ -725,17 +724,22 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 				`▶ [${targetLang}] ${urlObj.host}${urlObj.pathname} (${totalTime}ms) | fetch: ${fetchTime}ms | ${transInfo} | seg: ${extractedSegments.length} (+${newTranslations.length}) | paths: ${totalPaths} (+${newPaths})`
 			)
 
+			// Execute deferred DB writes after response is sent
+			res.on('finish', () => {
+				executeDeferredWrites(deferredWrites)
+			})
+
 			// Send response with cache statistics
 			res.status(200)
 				.set('Content-Type', 'text/html; charset=utf-8')
-				.set('X-Segment-Cache-Hits', String(cachedHits))
-				.set('X-Segment-Cache-Misses', String(cacheMisses))
+				// .set('X-Segment-Cache-Hits', String(cachedHits))
+				// .set('X-Segment-Cache-Misses', String(cacheMisses))
 				.send(html)
 		} catch (fetchError) {
 			console.error('Fetch/parse error:', fetchError)
 			res.status(502)
 				.set('Content-Type', 'text/plain')
-				.set('X-Error', 'Failed to fetch or parse page')
+				// .set('X-Error', 'Failed to fetch or parse page')
 				.send('Fetch/parse failed')
 		}
 	} catch (error) {
