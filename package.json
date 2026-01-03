@@ -3,8 +3,8 @@
 	"private": true,
 	"scripts": {
 		"dev": "pnpm --parallel -r dev",
-		"dev:translate": "pnpm --filter @pantolingo/translate dev",
-		"dev:www": "pnpm --filter @pantolingo/www dev",
+		"dev:translate": "pnpm --filter @pantolingo/db build && pnpm --filter @pantolingo/translate dev",
+		"dev:www": "pnpm --filter @pantolingo/db build && pnpm --filter @pantolingo/www dev",
 		"build": "pnpm -r build",
 		"build:translate": "pnpm --filter @pantolingo/translate... build",
 		"build:www": "pnpm --filter @pantolingo/www... build",

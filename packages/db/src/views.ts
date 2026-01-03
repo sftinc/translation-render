@@ -23,7 +23,7 @@ export async function recordPageView(
 }
 
 /**
- * Update last_used_at for translated segments that were fetched from cache.
+ * Update last_used_on for translated segments that were fetched from cache.
  * Only updates if the current date is different (to minimize writes).
  * Non-blocking - errors are logged but don't throw.
  *
@@ -41,22 +41,22 @@ export async function updateSegmentLastUsed(
 	try {
 		await pool.query(
 			`UPDATE translated_segment ts
-			 SET last_used_at = CURRENT_DATE
+			 SET last_used_on = CURRENT_DATE
 			 FROM origin_segment os
 			 WHERE ts.origin_segment_id = os.id
 			   AND os.origin_id = $1
 			   AND ts.lang = $2
 			   AND os.text_hash = ANY($3::text[])
-			   AND (ts.last_used_at IS NULL OR ts.last_used_at < CURRENT_DATE)`,
+			   AND (ts.last_used_on IS NULL OR ts.last_used_on < CURRENT_DATE)`,
 			[originId, lang, textHashes]
 		)
 	} catch (error) {
-		console.error('Failed to update segment last_used_at:', error)
+		console.error('Failed to update segment last_used_on:', error)
 	}
 }
 
 /**
- * Update last_used_at for translated paths that were fetched from cache.
+ * Update last_used_on for translated paths that were fetched from cache.
  * Only updates if the current date is different (to minimize writes).
  * Non-blocking - errors are logged but don't throw.
  *
@@ -74,16 +74,16 @@ export async function updatePathLastUsed(
 	try {
 		await pool.query(
 			`UPDATE translated_path tp
-			 SET last_used_at = CURRENT_DATE
+			 SET last_used_on = CURRENT_DATE
 			 FROM origin_path op
 			 WHERE tp.origin_path_id = op.id
 			   AND op.origin_id = $1
 			   AND tp.lang = $2
 			   AND op.path = ANY($3::text[])
-			   AND (tp.last_used_at IS NULL OR tp.last_used_at < CURRENT_DATE)`,
+			   AND (tp.last_used_on IS NULL OR tp.last_used_on < CURRENT_DATE)`,
 			[originId, lang, paths]
 		)
 	} catch (error) {
-		console.error('Failed to update path last_used_at:', error)
+		console.error('Failed to update path last_used_on:', error)
 	}
 }

@@ -83,7 +83,7 @@ async function executeDeferredWrites(writes: DeferredWrites): Promise<void> {
 			recordPageView(pathIds.originPathId, lang)
 		}
 
-		// 5. Update last_used_at for cached items (fire-and-forget)
+		// 5. Update last_used_on for cached items (fire-and-forget)
 		if (cachedSegmentHashes.length > 0) {
 			updateSegmentLastUsed(originId, lang, cachedSegmentHashes)
 		}
@@ -468,7 +468,7 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 				cachedHits = cached.size
 				cacheMisses = newSegments.length
 
-				// Collect cached segment hashes for deferred last_used_at update
+				// Collect cached segment hashes for deferred last_used_on update
 				if (cachedTranslations.size > 0) {
 					deferredWrites.cachedSegmentHashes = Array.from(cachedTranslations.keys()).map((text) => hashText(text))
 				}
@@ -546,7 +546,7 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 							normalizedPaths
 						)
 
-						// Collect cached paths for deferred last_used_at update
+						// Collect cached paths for deferred last_used_on update
 						if (existingPathnames.size > 0) {
 							deferredWrites.cachedPaths = Array.from(existingPathnames.keys())
 						}
