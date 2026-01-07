@@ -5,7 +5,7 @@ import { SegmentTable } from '@/components/dashboard/SegmentTable'
 import { PathTable } from '@/components/dashboard/PathTable'
 import { Toggle } from '@/components/ui/Toggle'
 import { Pagination } from '@/components/ui/Pagination'
-import { getLanguageName, formatNumber } from '@/lib/utils'
+import { formatNumber } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,16 +50,9 @@ export default async function HostDetailPage({ params, searchParams }: HostDetai
 						label: `${host.originDomain} (${host.originLang})`,
 						href: `/dashboard/origin/${host.originId}`,
 					},
-					{ label: host.hostname },
+					{ label: `${host.hostname} (${host.targetLang})` },
 				]}
 			/>
-
-			<div className="mb-8">
-				<h2 className="text-2xl font-semibold text-[var(--text-heading)]">{host.hostname}</h2>
-				<p className="mt-1 text-[var(--text-muted)]">
-					{getLanguageName(host.originLang)} → {getLanguageName(host.targetLang)}
-				</p>
-			</div>
 
 			{/* View and Filter toggles */}
 			<div className="mb-6 flex flex-wrap items-center gap-4">

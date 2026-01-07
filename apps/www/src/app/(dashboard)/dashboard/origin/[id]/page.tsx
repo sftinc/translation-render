@@ -34,7 +34,7 @@ export default async function OriginDetailPage({ params }: OriginDetailPageProps
 				]}
 			/>
 
-			<h3 className="mb-4 text-lg font-medium text-[var(--text-heading)]">Translation Hosts</h3>
+			<h2 className="mb-4 text-2xl font-semibold text-[var(--text-heading)]">Hosts</h2>
 
 			<HostTable hosts={hosts} />
 		</div>

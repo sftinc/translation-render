@@ -20,7 +20,7 @@ export function OriginCard({ origin }: OriginCardProps) {
 							{formatNumber(origin.hostCount)}
 						</div>
 						<div className="text-xs text-[var(--text-muted)]">
-							{origin.hostCount === 1 ? 'Language' : 'Languages'}
+							{origin.hostCount === 1 ? 'Host' : 'Hosts'}
 						</div>
 					</div>
 					<div>

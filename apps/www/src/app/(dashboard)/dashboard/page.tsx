@@ -8,10 +8,7 @@ export default async function DashboardPage() {
 
 	return (
 		<div>
-			<div className="mb-8">
-				<h2 className="text-2xl font-semibold text-[var(--text-heading)]">Your Origins</h2>
-				<p className="mt-1 text-[var(--text-muted)]">Manage your translation projects</p>
-			</div>
+			<h2 className="mb-4 text-2xl font-semibold text-[var(--text-heading)]">Your Origins</h2>
 
 			{origins.length === 0 ? (
 				<div className="text-center py-12 bg-[var(--card-bg)] rounded-lg">
