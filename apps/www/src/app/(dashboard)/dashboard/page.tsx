@@ -1,17 +1,29 @@
-// Verify @pantolingo/db import resolves
-import { testConnection } from '@pantolingo/db'
+import { getOriginsWithStats } from '@pantolingo/db'
+import { OriginCard } from '@/components/dashboard/OriginCard'
 
-export default function DashboardPage() {
-  // Note: testConnection is imported to verify the package resolves
-  // It's not called here - this is just an import verification
-  void testConnection
+export const dynamic = 'force-dynamic'
 
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-6">
-      <div className="text-center max-w-lg bg-[var(--card-bg)] p-10 rounded-lg shadow-[0_2px_8px_var(--shadow-color)]">
-        <h1 className="text-3xl font-semibold mb-4 text-[var(--text-heading)]">Dashboard</h1>
-        <p className="text-base leading-relaxed text-[var(--text-muted)]">Coming soon</p>
-      </div>
-    </main>
-  )
+export default async function DashboardPage() {
+	const origins = await getOriginsWithStats()
+
+	return (
+		<div>
+			<div className="mb-8">
+				<h2 className="text-2xl font-semibold text-[var(--text-heading)]">Your Origins</h2>
+				<p className="mt-1 text-[var(--text-muted)]">Manage your translation projects</p>
+			</div>
+
+			{origins.length === 0 ? (
+				<div className="text-center py-12 bg-[var(--card-bg)] rounded-lg">
+					<p className="text-[var(--text-muted)]">No origins configured yet</p>
+				</div>
+			) : (
+				<div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+					{origins.map((origin) => (
+						<OriginCard key={origin.id} origin={origin} />
+					))}
+				</div>
+			)}
+		</div>
+	)
 }

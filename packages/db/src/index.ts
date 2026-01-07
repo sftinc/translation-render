@@ -24,3 +24,22 @@ export {
 } from './paths.js'
 export { type PatternType } from './types.js'
 export { recordPageView, updateSegmentLastUsed, updatePathLastUsed } from './views.js'
+export {
+	getOriginsWithStats,
+	getOriginById,
+	getHostsForOrigin,
+	getHostById,
+	getSegmentsForHost,
+	getPathsForHost,
+	updateSegmentTranslation,
+	updatePathTranslation,
+	markSegmentReviewed,
+	markPathReviewed,
+	type OriginWithStats,
+	type HostWithStats,
+	type HostWithOrigin,
+	type SegmentWithTranslation,
+	type PathWithTranslation,
+	type PaginatedResult,
+	type Origin,
+} from './dashboard.js'

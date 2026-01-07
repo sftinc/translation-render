@@ -12,11 +12,21 @@
   --text-muted: #555;
   --text-subtle: #888;
   --shadow-color: rgba(0, 0, 0, 0.1);
+
+  /* Interactive colors */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --success: #16a34a;
+  --warning: #ca8a04;
+  --error: #dc2626;
+  --border: #d1d5db;
+  --border-hover: #9ca3af;
+  --input-bg: #fff;
 }
 
-/* Dark mode overrides */
+/* Dark mode - system preference */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     --page-bg: #111;
     --page-fg: #e5e5e5;
     --card-bg: #222;
@@ -24,7 +34,38 @@
     --text-muted: #b5b5b5;
     --text-subtle: #777;
     --shadow-color: rgba(0, 0, 0, 0.3);
+
+    /* Interactive colors */
+    --accent: #3b82f6;
+    --accent-hover: #60a5fa;
+    --success: #22c55e;
+    --warning: #eab308;
+    --error: #ef4444;
+    --border: #374151;
+    --border-hover: #4b5563;
+    --input-bg: #1a1a1a;
   }
+}
+
+/* Dark mode - manual override */
+:root.dark {
+  --page-bg: #111;
+  --page-fg: #e5e5e5;
+  --card-bg: #222;
+  --text-heading: #f5f5f5;
+  --text-muted: #b5b5b5;
+  --text-subtle: #777;
+  --shadow-color: rgba(0, 0, 0, 0.3);
+
+  /* Interactive colors */
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --success: #22c55e;
+  --warning: #eab308;
+  --error: #ef4444;
+  --border: #374151;
+  --border-hover: #4b5563;
+  --input-bg: #1a1a1a;
 }
 
 /* Apply theme colors to body */
