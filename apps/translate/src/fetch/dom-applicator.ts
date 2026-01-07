@@ -1,44 +1,49 @@
 /**
  * DOM application module for linkedom
  * Applies translations back to DOM using identical traversal order as extraction
+ * Supports grouped HTML segments with placeholder restoration
  */
 
-import { SKIP_SELECTORS, SKIP_TAGS, TRANSLATE_ATTRS } from '../config.js'
+import { TRANSLATE_ATTRS } from '../config.js'
 import type { Content } from '../types.js'
+import { placeholdersToHtml } from './dom-placeholders.js'
+import { shouldSkipNode, isInsideGroupedElement } from './dom-utils.js'
 
 /**
- * Check if a node should be skipped during traversal
- * MUST BE IDENTICAL to dom-extractor's shouldSkipNode
- * @param node - DOM node to check
- * @returns true if node or any ancestor should be skipped
+ * Apply translations to grouped HTML segments
+ * Uses element references from htmlMeta to set innerHTML directly
+ * @param translations - Translation strings array
+ * @param segments - Original extracted segments with HTML metadata
+ * @param indexRef - Object containing mutable index (passed by reference)
+ * @param groupedElements - Set to populate with grouped elements
  */
-function shouldSkipNode(node: Node): boolean {
-	let current: Node | null = node
+function applyToGroupedBlocks(
+	translations: string[],
+	segments: Content[],
+	indexRef: { index: number },
+	groupedElements: Set<Element>
+): void {
+	// Process all 'html' kind segments in order
+	while (indexRef.index < segments.length && segments[indexRef.index].kind === 'html') {
+		const segment = segments[indexRef.index]
+		const translation = translations[indexRef.index]
 
-	while (current) {
-		if (current.nodeType === 1) {
-			// Node.ELEMENT_NODE
-			const elem = current as Element
+		if (segment.htmlMeta) {
+			// Restore HTML tags from placeholders
+			const restoredHtml = placeholdersToHtml(translation, segment.htmlMeta.replacements)
 
-			for (const selector of SKIP_SELECTORS) {
-				try {
-					if (elem.matches(selector)) {
-						return true
-					}
-				} catch (e) {
-					// Invalid selector, continue
-				}
-			}
+			// Apply with whitespace restoration
+			const final = segment.ws ? segment.ws.leading + restoredHtml + segment.ws.trailing : restoredHtml
 
-			if (SKIP_TAGS.has(elem.tagName.toLowerCase())) {
-				return true
-			}
+			// Set innerHTML on the element
+			segment.htmlMeta.element.innerHTML = final
+
+			// Track grouped element so text node application skips it
+			groupedElements.add(segment.htmlMeta.element)
 		}
 
-		current = current.parentNode
+		indexRef.index++
 	}
-
-	return false
 }
 
 /**
@@ -48,14 +53,21 @@ function shouldSkipNode(node: Node): boolean {
  * @param translations - Translation strings array
  * @param segments - Original extracted segments with whitespace metadata
  * @param indexRef - Object containing mutable index (passed by reference)
+ * @param groupedElements - Set of elements that were grouped (to skip)
  */
 function applyToTextNodes(
 	node: Node,
 	translations: string[],
 	segments: Content[],
-	indexRef: { index: number }
+	indexRef: { index: number },
+	groupedElements: Set<Element>
 ): void {
 	if (shouldSkipNode(node)) {
+		return
+	}
+
+	// Skip if inside a grouped element (already applied as HTML segment)
+	if (isInsideGroupedElement(node, groupedElements)) {
 		return
 	}
 
@@ -80,7 +92,7 @@ function applyToTextNodes(
 	// Recurse through children in order
 	const children = node.childNodes
 	for (let i = 0; i < children.length; i++) {
-		applyToTextNodes(children[i], translations, segments, indexRef)
+		applyToTextNodes(children[i], translations, segments, indexRef, groupedElements)
 	}
 }
 
@@ -195,6 +207,7 @@ function applyHeadDescription(
 /**
  * Apply translations to linkedom DOM
  * Uses identical traversal order as extraction to ensure correct mapping
+ * Supports grouped HTML segments with placeholder restoration
  * @param document - linkedom Document object
  * @param translations - Array of translated strings (parallel to extracted segments)
  * @param segments - Original extracted segments with whitespace metadata
@@ -204,13 +217,19 @@ export function applyTranslations(document: Document, translations: string[], se
 	// Use object to maintain index reference across function calls
 	const indexRef = { index: 0 }
 
+	// Track grouped elements to skip during text node application
+	const groupedElements = new Set<Element>()
+
 	// Apply to head metadata first (must be identical order as extraction)
 	applyHeadTitle(document, translations, segments, indexRef)
 	applyHeadDescription(document, translations, segments, indexRef)
 
-	// Apply to text nodes (must be identical order as extraction)
+	// Apply to grouped HTML blocks (must be before text nodes, matching extraction order)
+	applyToGroupedBlocks(translations, segments, indexRef, groupedElements)
+
+	// Apply to remaining text nodes (skipping grouped elements)
 	if (document.body) {
-		applyToTextNodes(document.body, translations, segments, indexRef)
+		applyToTextNodes(document.body, translations, segments, indexRef, groupedElements)
 	}
 
 	// Apply to attributes (must be identical order as extraction)

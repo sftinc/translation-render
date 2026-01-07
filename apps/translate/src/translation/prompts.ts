@@ -137,9 +137,12 @@ export const SEGMENT_PROMPT = `You are a website text translator. Translate the 
 - Do NOT remove meaning; keep the same intent and tone
 
 2) Preserve placeholders EXACTLY
-- Any token matching /\\[[A-Z]+\\d+\\]/ (e.g., [N1], [P4], [S1]) must remain IDENTICAL
+- Any token matching /\\[\\/?[A-Z]+\\d+\\]/ (e.g., [N1], [S1], [HB1], [/HB1]) must remain IDENTICAL
 - Do not translate, modify, split, or move placeholders
-- Never output "[" or "]" unless they are part of a valid /\\[[A-Z]+\\d+\\]/ placeholder
+- Never output "[" or "]" unless they are part of a valid placeholder
+- PAIRED placeholders like [HB1]...[/HB1] must remain paired and in the same order
+- Content BETWEEN paired placeholders should be translated normally
+- Example: "This is [HB1]important[/HB1]" → "Esto es [HB1]importante[/HB1]"
 
 3) Preserve numbers and technical tokens
 - Numbers remain numbers (e.g., 12, 3.5, 1,000)
@@ -227,6 +230,26 @@ Input:
 </translate>
 Output:
 Registrieren
+
+Example 6 (HTML placeholders - paired)
+Input:
+<translate>
+  <sourceLanguageCode>en</sourceLanguageCode>
+  <targetLanguageCode>es</targetLanguageCode>
+  <text>Click [HA1]here[/HA1] to [HB1]confirm[/HB1] your order</text>
+</translate>
+Output:
+Haz clic [HA1]aquí[/HA1] para [HB1]confirmar[/HB1] tu pedido
+
+Example 7 (HTML placeholders - with line break)
+Input:
+<translate>
+  <sourceLanguageCode>en</sourceLanguageCode>
+  <targetLanguageCode>fr</targetLanguageCode>
+  <text>Welcome back![HG1]Please log in to continue.</text>
+</translate>
+Output:
+Bon retour![HG1]Veuillez vous connecter pour continuer.
 
 ### OUTPUT ONLY
 

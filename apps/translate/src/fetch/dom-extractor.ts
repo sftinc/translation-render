@@ -1,46 +1,67 @@
 /**
  * DOM extraction module for linkedom
  * Extracts translatable segments using recursive DOM traversal (TreeWalker replacement)
+ * Supports grouped HTML extraction for inline elements
  */
 
-import { SKIP_SELECTORS, SKIP_TAGS, TRANSLATE_ATTRS } from '../config.js'
+import { TRANSLATE_ATTRS, BLOCK_TAGS } from '../config.js'
 import type { Content } from '../types.js'
+import { isGroupableElement, htmlToPlaceholders, containsText } from './dom-placeholders.js'
+import { shouldSkipNode, isInsideGroupedElement } from './dom-utils.js'
 
 /**
- * Check if a node should be skipped during traversal
- * @param node - DOM node to check
- * @returns true if node or any ancestor should be skipped
+ * Extract grouped block elements as single segments with HTML placeholders
+ * @param node - Current node in traversal
+ * @param segments - Accumulator array for segments
+ * @param groupedElements - Set to track which elements were grouped
  */
-function shouldSkipNode(node: Node): boolean {
-	let current: Node | null = node
-
-	while (current) {
-		// Check if Element
-		if (current.nodeType === 1) {
-			// Node.ELEMENT_NODE
-			const elem = current as Element
-
-			// Check skip selectors (.notranslate, [notranslate])
-			for (const selector of SKIP_SELECTORS) {
-				try {
-					if (elem.matches(selector)) {
-						return true
-					}
-				} catch (e) {
-					// Invalid selector, continue
-				}
-			}
-
-			// Check skip tags (script, style, pre, code, etc.)
-			if (SKIP_TAGS.has(elem.tagName.toLowerCase())) {
-				return true
-			}
-		}
-
-		current = current.parentNode
+function extractGroupedBlocks(node: Node, segments: Content[], groupedElements: Set<Element>): void {
+	if (shouldSkipNode(node)) {
+		return
 	}
 
-	return false
+	if (node.nodeType === 1) {
+		const elem = node as Element
+		const tagName = elem.tagName.toLowerCase()
+
+		// Check if this is a groupable block element
+		if (BLOCK_TAGS.has(tagName) && isGroupableElement(elem)) {
+			const innerHTML = elem.innerHTML
+			const trimmed = innerHTML.trim()
+
+			// Only process if there's actual text content
+			if (trimmed.length > 0 && containsText(trimmed)) {
+				const { text, replacements } = htmlToPlaceholders(innerHTML)
+
+				// Only use grouped extraction if the result has content
+				if (text.trim().length > 0) {
+					const leading = innerHTML.match(/^(\s*)/)?.[1] || ''
+					const trailing = innerHTML.match(/(\s*)$/)?.[1] || ''
+
+					segments.push({
+						kind: 'html',
+						value: text.trim(),
+						ws: { leading, trailing },
+						htmlMeta: {
+							originalInnerHTML: innerHTML,
+							replacements,
+							element: elem,
+						},
+					})
+
+					// Mark this element as grouped so text node extraction skips it
+					groupedElements.add(elem)
+					return // Don't recurse into this element
+				}
+			}
+		}
+	}
+
+	// Recurse into children
+	const children = node.childNodes
+	for (let i = 0; i < children.length; i++) {
+		extractGroupedBlocks(children[i], segments, groupedElements)
+	}
 }
 
 /**
@@ -48,10 +69,16 @@ function shouldSkipNode(node: Node): boolean {
  * Depth-first traversal maintains document order (same as TreeWalker)
  * @param node - Current node in traversal
  * @param segments - Accumulator array for segments
+ * @param groupedElements - Set of elements that were grouped (to skip)
  */
-function extractTextNodes(node: Node, segments: Content[]): void {
+function extractTextNodes(node: Node, segments: Content[], groupedElements: Set<Element>): void {
 	// Skip if node or ancestor should be skipped
 	if (shouldSkipNode(node)) {
+		return
+	}
+
+	// Skip if inside a grouped element (already extracted as HTML segment)
+	if (isInsideGroupedElement(node, groupedElements)) {
 		return
 	}
 
@@ -76,7 +103,7 @@ function extractTextNodes(node: Node, segments: Content[]): void {
 	// Recursively process child nodes in order (depth-first)
 	const children = node.childNodes
 	for (let i = 0; i < children.length; i++) {
-		extractTextNodes(children[i], segments)
+		extractTextNodes(children[i], segments, groupedElements)
 	}
 }
 
@@ -170,6 +197,7 @@ function extractHeadDescription(document: Document, segments: Content[]): void {
 /**
  * Extract all translatable segments from linkedom DOM
  * Uses recursive traversal to replicate TreeWalker behavior
+ * Supports grouped HTML extraction for block elements with inline content
  * @param document - linkedom Document object
  * @returns Array of Segment objects in stable traversal order
  */
@@ -181,13 +209,23 @@ export function extractSegments(document: Document): Content[] {
 		return segments
 	}
 
+	// Track elements that were grouped (to skip during text node extraction)
+	const groupedElements = new Set<Element>()
+
 	// Extract head metadata first (title and description)
 	extractHeadTitle(document, segments)
 	extractHeadDescription(document, segments)
 
-	// Extract text nodes from body (same starting point as TreeWalker)
+	// Extract grouped blocks first (p, h1-h6, li, etc. with inline content)
+	// This produces 'html' kind segments with placeholders
 	if (document.body) {
-		extractTextNodes(document.body, segments)
+		extractGroupedBlocks(document.body, segments, groupedElements)
+	}
+
+	// Extract remaining text nodes (skipping content inside grouped elements)
+	// This handles non-groupable content that falls back to individual text nodes
+	if (document.body) {
+		extractTextNodes(document.body, segments, groupedElements)
 	}
 
 	// Extract attributes from all elements

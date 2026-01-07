@@ -49,14 +49,43 @@ export interface SkipWordReplacement {
 }
 
 /**
+ * HTML tag types for placeholder conversion
+ * Used to normalize different tags to consistent placeholders
+ */
+export type HtmlTagType = 'HB' | 'HE' | 'HA' | 'HS' | 'HG'
+
+/**
+ * Represents an HTML tag replacement (tag → placeholder)
+ * Unified interface for both paired tags and void tags
+ */
+export interface HtmlTagReplacement {
+	placeholder: string // '[HB1]' or '[HG1]'
+	closePlaceholder?: string // '[/HB1]' - undefined for void tags
+	openTag: string // '<strong class="red">' or '<br>'
+	closeTag?: string // '</strong>' - undefined for void tags
+	tagName: string // 'strong' or 'br'
+}
+
+/**
+ * Metadata for HTML placeholder segments
+ * Stores original HTML and replacement data for restoration
+ */
+export interface HtmlPlaceholderMeta {
+	originalInnerHTML: string
+	replacements: HtmlTagReplacement[]
+	element: Element // DOM reference for application
+}
+
+/**
  * A content item to be translated
- * Can be a text node, an attribute value, or a path name
+ * Can be a text node, an attribute value, a path name, or grouped HTML
  */
 export interface Content {
-	kind: 'text' | 'attr' | 'path'
+	kind: 'text' | 'attr' | 'path' | 'html'
 	attr?: string // Attribute name (e.g., 'title', 'alt'), only present if kind === 'attr'
 	value: string // The text content or pathname to translate
 	ws?: { leading: string; trailing: string } // Whitespace metadata (optional, for backward compatibility)
+	htmlMeta?: HtmlPlaceholderMeta // Only present if kind === 'html'
 }
 
 /**
