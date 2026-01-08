@@ -254,10 +254,10 @@ Input:
 <translate>
   <sourceLanguageCode>en</sourceLanguageCode>
   <targetLanguageCode>fr</targetLanguageCode>
-  <text>Welcome back![HG1]Please log in to continue.</text>
+  <text>Welcome back![HV1]Please log in to continue.</text>
 </translate>
 Output:
-Bon retour![HG1]Veuillez vous connecter pour continuer.
+Bon retour![HV1]Veuillez vous connecter pour continuer.
 
 ### OUTPUT ONLY
 

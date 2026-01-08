@@ -67,14 +67,15 @@ export const HTML_TAG_MAP: Record<string, HtmlTagType> = {
 	code: 'HG',
 	kbd: 'HG',
 	time: 'HG',
-	// Void tags (also use HG, no closing placeholder)
-	br: 'HG',
-	img: 'HG',
-	wbr: 'HG',
+	// Void tags (HV = HTML Void, no closing placeholder)
+	br: 'HV',
+	hr: 'HV',
+	img: 'HV',
+	wbr: 'HV',
 }
 
 // Set of void tags (to know not to look for closing tag)
-export const VOID_TAGS = new Set(['br', 'img', 'wbr'])
+export const VOID_TAGS = new Set(['br', 'hr', 'img', 'wbr'])
 
 // Tags considered inline for grouping purposes
 export const INLINE_TAGS = new Set([

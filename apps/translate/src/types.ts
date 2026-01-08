@@ -52,7 +52,7 @@ export interface SkipWordReplacement {
  * HTML tag types for placeholder conversion
  * Used to normalize different tags to consistent placeholders
  */
-export type HtmlTagType = 'HB' | 'HE' | 'HA' | 'HS' | 'HG'
+export type HtmlTagType = 'HB' | 'HE' | 'HA' | 'HS' | 'HG' | 'HV'
 
 /**
  * Represents an HTML tag replacement (tag → placeholder)
