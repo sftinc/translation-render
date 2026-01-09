@@ -66,7 +66,7 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
 					<h2 className="text-lg font-semibold text-[var(--text-heading)]">{title}</h2>
 					<button
 						onClick={onClose}
-						className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-heading)] hover:bg-[var(--border)] transition-colors"
+						className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-heading)] hover:bg-[var(--border)] transition-colors focus:outline-none"
 						aria-label="Close"
 					>
 						<svg
