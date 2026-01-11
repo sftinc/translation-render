@@ -1,9 +1,16 @@
 import { notFound, redirect } from 'next/navigation'
-import { getOriginById, isValidLangForOrigin, getSegmentsForLang, getPathsForLang } from '@pantolingo/db'
+import {
+	getOriginById,
+	isValidLangForOrigin,
+	getPathsForOrigin,
+	getSegmentsForLang,
+	getPathsForLang,
+} from '@pantolingo/db'
 import { DashboardNav } from '@/components/dashboard/DashboardNav'
 import { SegmentTable } from '@/components/dashboard/SegmentTable'
 import { PathTable } from '@/components/dashboard/PathTable'
 import { Toggle } from '@/components/ui/Toggle'
+import { PathSelect } from '@/components/ui/PathSelect'
 import { Pagination } from '@/components/ui/Pagination'
 import { formatNumber } from '@/lib/utils'
 import { getFlag, getLanguageLabel } from '@pantolingo/lang'
@@ -12,15 +19,19 @@ export const dynamic = 'force-dynamic'
 
 interface LangDetailPageProps {
 	params: Promise<{ id: string; langCd: string }>
-	searchParams: Promise<{ view?: string; filter?: string; page?: string }>
+	searchParams: Promise<{ view?: string; filter?: string; page?: string; path?: string }>
 }
 
 export default async function LangDetailPage({ params, searchParams }: LangDetailPageProps) {
 	const { id, langCd } = await params
-	const { view = 'segments', filter = 'unreviewed', page = '1' } = await searchParams
+	const { view = 'segments', filter = 'unreviewed', page = '1', path } = await searchParams
 	const originId = parseInt(id, 10)
 	const pageNum = parseInt(page, 10) || 1
 	const limit = 50
+
+	// Parse path param: undefined = all, 'none' = orphans, number = specific path
+	const pathId: number | 'none' | undefined =
+		path === undefined ? undefined : path === 'none' ? 'none' : parseInt(path, 10) || undefined
 
 	// Invalid originId - show 404
 	if (isNaN(originId)) {
@@ -43,9 +54,12 @@ export default async function LangDetailPage({ params, searchParams }: LangDetai
 	const validView = view === 'paths' ? 'paths' : 'segments'
 	const validFilter = filter === 'all' ? 'all' : 'unreviewed'
 
+	// Fetch paths for the dropdown (only when viewing segments)
+	const pathOptions = validView === 'segments' ? await getPathsForOrigin(originId) : []
+
 	const segmentData =
 		validView === 'segments'
-			? await getSegmentsForLang(originId, langCd, validFilter, pageNum, limit)
+			? await getSegmentsForLang(originId, langCd, validFilter, pageNum, limit, pathId)
 			: null
 	const pathData =
 		validView === 'paths'
@@ -53,7 +67,9 @@ export default async function LangDetailPage({ params, searchParams }: LangDetai
 			: null
 	const data = segmentData ?? pathData!
 
-	const baseUrl = `/dashboard/origin/${originId}/lang/${langCd}?view=${validView}&filter=${validFilter}`
+	// Build path param string for URLs
+	const pathParam = pathId !== undefined ? `&path=${pathId}` : ''
+	const baseUrl = `/dashboard/origin/${originId}/lang/${langCd}?view=${validView}&filter=${validFilter}${pathParam}`
 
 	return (
 		<div>
@@ -85,9 +101,17 @@ export default async function LangDetailPage({ params, searchParams }: LangDetai
 						{ value: 'all', label: 'All' },
 					]}
 					value={validFilter}
-					baseUrl={`/dashboard/origin/${originId}/lang/${langCd}?view=${validView}`}
+					baseUrl={`/dashboard/origin/${originId}/lang/${langCd}?view=${validView}${pathParam}`}
 					paramName="filter"
 				/>
+				{validView === 'segments' && (
+					<PathSelect
+						paths={pathOptions}
+						selectedPathId={pathId ?? null}
+						baseUrl={`/dashboard/origin/${originId}/lang/${langCd}?view=${validView}&filter=${validFilter}`}
+						className="ml-auto"
+					/>
+				)}
 			</div>
 
 			{/* Empty state message */}

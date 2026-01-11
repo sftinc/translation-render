@@ -29,6 +29,7 @@ export {
 	getOriginById,
 	getLangsForOrigin,
 	isValidLangForOrigin,
+	getPathsForOrigin,
 	getSegmentsForLang,
 	getPathsForLang,
 	updateSegmentTranslation,
@@ -41,4 +42,5 @@ export {
 	type PathWithTranslation,
 	type PaginatedResult,
 	type Origin,
+	type PathOption,
 } from './dashboard.js'

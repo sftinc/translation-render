@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "dotenv": "^17.2.3",
     "@lexical/clipboard": "^0.39.0",
     "@lexical/react": "^0.39.0",
     "@lexical/rich-text": "^0.39.0",

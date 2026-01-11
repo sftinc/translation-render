@@ -56,6 +56,11 @@ export interface Origin {
 	originLang: string
 }
 
+export interface PathOption {
+	id: number
+	path: string
+}
+
 // =============================================================================
 // Read Queries
 // =============================================================================
@@ -180,24 +185,56 @@ export async function isValidLangForOrigin(originId: number, lang: string): Prom
 }
 
 /**
+ * Get all paths for an origin (for path filter dropdown)
+ * Only returns paths that have at least one segment linked
+ */
+export async function getPathsForOrigin(originId: number): Promise<PathOption[]> {
+	const result = await pool.query<{ id: number; path: string }>(
+		`SELECT op.id, op.path FROM origin_path op
+		WHERE op.origin_id = $1
+		  AND EXISTS (SELECT 1 FROM origin_path_segment ops WHERE ops.origin_path_id = op.id)
+		ORDER BY op.path`,
+		[originId]
+	)
+	return result.rows
+}
+
+/**
  * Get segments for an origin/language with pagination and filtering
  * @param originId - Origin ID
  * @param lang - Target language code
  * @param filter - 'unreviewed' (translated but not reviewed) or 'all'
  * @param page - Page number (1-indexed)
  * @param limit - Items per page
+ * @param pathId - Optional path filter: undefined = all, 'none' = orphans, number = specific path
  */
 export async function getSegmentsForLang(
 	originId: number,
 	lang: string,
 	filter: 'unreviewed' | 'all',
 	page: number,
-	limit: number
+	limit: number,
+	pathId?: number | 'none'
 ): Promise<PaginatedResult<SegmentWithTranslation>> {
 	const offset = (page - 1) * limit
 
-	// Build query based on filter
+	// Build query parts based on filters
+	let fromClause = 'FROM origin_segment os'
 	let whereClause = 'WHERE os.origin_id = $1'
+	const params: (number | string)[] = [originId, lang]
+
+	// Path filter
+	if (typeof pathId === 'number') {
+		// Filter to segments on a specific path
+		fromClause += ' INNER JOIN origin_path_segment ops ON ops.origin_segment_id = os.id'
+		whereClause += ` AND ops.origin_path_id = $${params.length + 1}`
+		params.push(pathId)
+	} else if (pathId === 'none') {
+		// Filter to orphan segments (no path association)
+		whereClause += ' AND NOT EXISTS (SELECT 1 FROM origin_path_segment ops WHERE ops.origin_segment_id = os.id)'
+	}
+
+	// Review filter
 	if (filter === 'unreviewed') {
 		whereClause += ' AND ts.id IS NOT NULL AND ts.reviewed_at IS NULL'
 	}
@@ -206,11 +243,11 @@ export async function getSegmentsForLang(
 	const countResult = await pool.query<{ count: string }>(
 		`
 		SELECT COUNT(*) as count
-		FROM origin_segment os
+		${fromClause}
 		LEFT JOIN translated_segment ts ON ts.origin_segment_id = os.id AND ts.lang = $2
 		${whereClause}
 	`,
-		[originId, lang]
+		params
 	)
 	const total = parseInt(countResult.rows[0].count, 10)
 
@@ -229,13 +266,13 @@ export async function getSegmentsForLang(
 			os.text,
 			ts.translated_text,
 			ts.reviewed_at
-		FROM origin_segment os
+		${fromClause}
 		LEFT JOIN translated_segment ts ON ts.origin_segment_id = os.id AND ts.lang = $2
 		${whereClause}
 		ORDER BY os.id
-		LIMIT $3 OFFSET $4
+		LIMIT $${params.length + 1} OFFSET $${params.length + 2}
 	`,
-		[originId, lang, limit, offset]
+		[...params, limit, offset]
 	)
 
 	return {

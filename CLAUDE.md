@@ -8,12 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 -   **Planning Agent**
     -   Include a **clickable markdown link** to the plan file at the end of the plan
-    -   Format: `[filename.md](relative-path)`
-    -   Path: Count folders from working directory to user home, use that many `../`, then `.claude/plans/filename.md`
-    -   **Examples:**
-        - `/Users/jane/myapp` → `[my-plan.md](../.claude/plans/my-plan.md)`
-        - `/Users/jane/projects/myapp` → `[my-plan.md](../../.claude/plans/my-plan.md)`
-        - `/Users/jane/dev/github/myapp` → `[my-plan.md](../../../.claude/plans/my-plan.md)`
+    -   Format: `[filename.md](../../../../.claude/plans/filename.md)`
 
 ## Project Overview
 
@@ -25,6 +20,11 @@ Pantolingo is a **pnpm monorepo** with two applications and shared packages:
 -   **`packages/lang`**: Shared language utilities (41 supported languages, RTL detection)
 
 **Core Use Case**: Host translated versions of a website on different domains (e.g., `es.esnipe.com` for Spanish, `fr.esnipe.com` for French) without maintaining separate codebases.
+
+## Prerequisites
+
+-   Node.js >= 20.0.0
+-   pnpm >= 8.0.0
 
 ## Monorepo Structure
 
@@ -112,6 +112,9 @@ pnpm start
 # Start individual apps
 pnpm start:translate
 pnpm start:www
+
+# Clean all node_modules and reinstall (useful for fixing dependency issues)
+pnpm clean
 ```
 
 ## Architecture
@@ -180,9 +183,10 @@ import { getOriginsWithStats, updateSegmentTranslation } from '@pantolingo/db'
 
 ### Shared Language Package (`packages/lang`)
 
-Provides language metadata and utilities using `Intl.DisplayNames`:
+Provides language metadata and utilities using **lowercase BCP 47 regional codes** (e.g., `es-mx`, `pt-br`) and `Intl.DisplayNames`:
 
 -   41 supported languages with localized display names
+-   Flag emoji generation from country codes
 -   RTL language detection (Arabic, Hebrew, Farsi, Urdu)
 -   Country-language mappings
 
@@ -219,25 +223,47 @@ Next.js 16 app with Tailwind CSS v4 and React 19.
 -   `origin_path`: Source URL paths scoped to origin
 -   `translated_path`: Translated URL paths scoped to origin + language
 -   `origin_path_segment`: Junction linking paths to segments (for cache invalidation)
--   `origin_path_view`: Page view analytics per path/language
--   `company`: Companies (for multi-tenant billing)
--   `company_user`: Company membership
--   `user`: User accounts
+-   `origin_path_view`: Page view analytics per path/language/date
+-   `account`: Accounts (for multi-tenant billing)
+-   `account_profile`: Account membership with roles
+-   `profile`: User profiles (email, name)
+
+**Database functions**:
+
+-   `calculate_word_count()`: Counts words for both space-delimited and character-based languages (CJK, Thai, etc.), strips HTML placeholders
+-   `update_updated_at_column()`: Trigger to auto-update `updated_at` timestamps
+-   `set_translated_segment_word_count()` / `set_translated_path_word_count()`: Triggers to auto-calculate word counts on insert/update
 
 ### Environment Variables
 
-**Important**: The `.env` file must be at the **monorepo root** (not in individual app directories). The translate app explicitly loads from `../../.env` relative to its source directory.
+**Important**: The `.env` file must be at the **monorepo root**. Both apps load from there:
+- `translate` app: loads via dotenv in `server.ts`
+- `www` app: loads via dotenv in `next.config.ts`
 
-Required:
+Copy `.env.example` to `.env` and fill in your values. Never commit `.env` to version control.
 
--   `POSTGRES_DB_URL`: PostgreSQL connection string
--   `OPENROUTER_API_KEY`: OpenRouter API key for translation
+#### Required Variables
 
-Optional:
+| Variable | Used By | Description |
+|----------|---------|-------------|
+| `POSTGRES_DB_URL` | Both apps | PostgreSQL connection string. Format: `postgresql://[user]:[password]@[host]:[port]/[database]?sslmode=require`. Both apps connect to the same database via the `@pantolingo/db` package. |
+| `OPENROUTER_API_KEY` | translate | API key for [OpenRouter](https://openrouter.ai/keys). Powers AI translations by routing requests to LLMs (Claude, GPT, etc.). Required for the translation proxy to function. |
 
--   `PORT`: Server port (defaults to 8787)
+#### Optional Variables
 
-Copy `.env` to get started (never commit secrets).
+| Variable | Used By | Default | Description |
+|----------|---------|---------|-------------|
+| `PORT` | translate | `8787` | Port the translation proxy listens on. |
+| `DASHBOARD_ALLOWED_IPS` | www | (none) | Comma-separated IP allowlist for dashboard access. If set, only listed IPs can access `/dashboard/*` routes. Leave unset to allow all. |
+| `GOOGLE_PROJECT_ID` | translate | (none) | Google Cloud project ID. Currently unused, reserved for future Google Translate API integration. |
+
+#### Render.com Deployment
+
+When deploying to Render, add these environment variables to each service:
+
+**translate service**: `POSTGRES_DB_URL`, `OPENROUTER_API_KEY`, `PORT` (optional)
+
+**www service**: `POSTGRES_DB_URL`, `DASHBOARD_ALLOWED_IPS` (optional)
 
 ## Deployment (Render.com)
 
