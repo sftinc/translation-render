@@ -2,13 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# IMPORTANT Instructions
+# IMPORTANT User Instructions
 
 -   **Commit messages**: Do NOT include "Generated with Claude Code" or similar attribution. Keep commit messages clean and focused on the changes only.
 
 -   **Planning Agent**
+
     -   Include a **clickable markdown link** to the plan file at the end of the plan
     -   Format: `[filename.md](../../../../.claude/plans/filename.md)`
+
+-   **Todo files**: When creating future work items, add a file to `todo/` named `todo_<task-name>.md`.
+    -   `## Summary` - describe the change(s)
+    -   `## Why` - rationale (tables helpful for comparing current vs proposed)
+    -   `## Phase N: Name` - break into deployable phases with **Goal:** and `- [ ]` checkboxes
+    -   `### Details` - numbered implementation steps with file paths
+    -   `## Open Questions` - unresolved decisions (optional)
 
 ## Project Overview
 
@@ -144,13 +152,13 @@ The translation proxy processes each request through this pipeline:
 
 Inline HTML elements are converted to placeholders during translation to preserve formatting:
 
-| Type | Tags | Example |
-|------|------|---------|
-| `HB` | `<b>`, `<strong>` | `[HB1]bold[/HB1]` |
-| `HE` | `<em>`, `<i>` | `[HE1]italic[/HE1]` |
-| `HA` | `<a>` | `[HA1]link[/HA1]` |
-| `HS` | `<span>` | `[HS1]styled[/HS1]` |
-| `HG` | `<u>`, `<sub>`, `<sup>`, `<mark>`, etc. | `[HG1]text[/HG1]` |
+| Type | Tags                                    | Example              |
+| ---- | --------------------------------------- | -------------------- |
+| `HB` | `<b>`, `<strong>`                       | `[HB1]bold[/HB1]`    |
+| `HE` | `<em>`, `<i>`                           | `[HE1]italic[/HE1]`  |
+| `HA` | `<a>`                                   | `[HA1]link[/HA1]`    |
+| `HS` | `<span>`                                | `[HS1]styled[/HS1]`  |
+| `HG` | `<u>`, `<sub>`, `<sup>`, `<mark>`, etc. | `[HG1]text[/HG1]`    |
 | `HV` | `<br>`, `<hr>`, `<img>`, `<wbr>` (void) | `[HV1]` (no closing) |
 
 Defined in `config.ts` (`HTML_TAG_MAP`, `VOID_TAGS`). Logic in `fetch/dom-placeholders.ts`.
@@ -201,6 +209,7 @@ import { getLanguageInfo, isRtlLanguage, SUPPORTED_LANGUAGES } from '@pantolingo
 Next.js 16 app with Tailwind CSS v4 and React 19.
 
 **Routes**:
+
 -   `/` - Marketing landing page
 -   `/login`, `/signup` - Auth pages
 -   `/dashboard` - Origins overview with segment/path counts
@@ -208,6 +217,7 @@ Next.js 16 app with Tailwind CSS v4 and React 19.
 -   `/dashboard/origin/[id]/lang/[langCd]` - Translation editor for segments and paths
 
 **Key Components**:
+
 -   `EditModal` - Modal with Lexical-based editor for editing translations
 -   `LangTable`, `SegmentTable`, `PathTable` - Data tables with pagination
 -   `PlaceholderEditor` - Lexical editor with placeholder validation (preserves `[HB1]...[/HB1]` formatting)
@@ -237,25 +247,26 @@ Next.js 16 app with Tailwind CSS v4 and React 19.
 ### Environment Variables
 
 **Important**: The `.env` file must be at the **monorepo root**. Both apps load from there:
-- `translate` app: loads via dotenv in `server.ts`
-- `www` app: loads via dotenv in `next.config.ts`
+
+-   `translate` app: loads via dotenv in `server.ts`
+-   `www` app: loads via dotenv in `next.config.ts`
 
 Copy `.env.example` to `.env` and fill in your values. Never commit `.env` to version control.
 
 #### Required Variables
 
-| Variable | Used By | Description |
-|----------|---------|-------------|
-| `POSTGRES_DB_URL` | Both apps | PostgreSQL connection string. Format: `postgresql://[user]:[password]@[host]:[port]/[database]?sslmode=require`. Both apps connect to the same database via the `@pantolingo/db` package. |
-| `OPENROUTER_API_KEY` | translate | API key for [OpenRouter](https://openrouter.ai/keys). Powers AI translations by routing requests to LLMs (Claude, GPT, etc.). Required for the translation proxy to function. |
+| Variable             | Used By   | Description                                                                                                                                                                               |
+| -------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POSTGRES_DB_URL`    | Both apps | PostgreSQL connection string. Format: `postgresql://[user]:[password]@[host]:[port]/[database]?sslmode=require`. Both apps connect to the same database via the `@pantolingo/db` package. |
+| `OPENROUTER_API_KEY` | translate | API key for [OpenRouter](https://openrouter.ai/keys). Powers AI translations by routing requests to LLMs (Claude, GPT, etc.). Required for the translation proxy to function.             |
 
 #### Optional Variables
 
-| Variable | Used By | Default | Description |
-|----------|---------|---------|-------------|
-| `PORT` | translate | `8787` | Port the translation proxy listens on. |
-| `DASHBOARD_ALLOWED_IPS` | www | (none) | Comma-separated IP allowlist for dashboard access. If set, only listed IPs can access `/dashboard/*` routes. Leave unset to allow all. |
-| `GOOGLE_PROJECT_ID` | translate | (none) | Google Cloud project ID. Currently unused, reserved for future Google Translate API integration. |
+| Variable                | Used By   | Default | Description                                                                                                                            |
+| ----------------------- | --------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                  | translate | `8787`  | Port the translation proxy listens on.                                                                                                 |
+| `DASHBOARD_ALLOWED_IPS` | www       | (none)  | Comma-separated IP allowlist for dashboard access. If set, only listed IPs can access `/dashboard/*` routes. Leave unset to allow all. |
+| `GOOGLE_PROJECT_ID`     | translate | (none)  | Google Cloud project ID. Currently unused, reserved for future Google Translate API integration.                                       |
 
 #### Render.com Deployment
 

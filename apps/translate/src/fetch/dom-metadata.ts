@@ -10,8 +10,12 @@ interface HreflangEntry {
 
 /**
  * Extract language code from BCP 47 regional code (e.g., "es-mx" → "es")
+ * Preserves script subtag for Chinese (zh-hans, zh-hant)
  */
 function getLangCode(bcp47: string): string {
+	if (bcp47.startsWith('zh-')) {
+		return bcp47
+	}
 	return bcp47.split('-')[0]
 }
 
