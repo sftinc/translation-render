@@ -69,7 +69,7 @@ export async function getHostConfig(hostname: string): Promise<HostConfig | null
 			target_lang: string
 			skip_words: string[] | null
 			skip_path: string[] | null
-			translate_path: boolean
+			translate_path: boolean | null
 			proxied_cache: number
 			origin_domain: string
 			origin_lang: string
@@ -78,9 +78,9 @@ export async function getHostConfig(hostname: string): Promise<HostConfig | null
 				h.id AS host_id,
 				h.origin_id,
 				h.target_lang,
-				h.skip_words,
-				h.skip_path,
-				h.translate_path,
+				o.skip_words,
+				o.skip_path,
+				o.translate_path,
 				h.proxied_cache,
 				o.domain AS origin_domain,
 				o.origin_lang
@@ -106,7 +106,7 @@ export async function getHostConfig(hostname: string): Promise<HostConfig | null
 			targetLang: row.target_lang,
 			skipWords: row.skip_words || [],
 			skipPath: parseSkipPath(row.skip_path),
-			translatePath: row.translate_path,
+			translatePath: row.translate_path ?? true,
 			proxiedCache: row.proxied_cache,
 		}
 

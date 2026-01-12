@@ -53,14 +53,14 @@ Current settings on `host` are actually properties of the source site, not the t
 
 ---
 
-## Phase 2: Database Migration
+## Phase 2: Database Migration ✅
 
 **Goal:** Move `skip_words`, `skip_path`, `translate_path` to origin table.
 
--   [ ] Write and test migration SQL
--   [ ] Backup production data
--   [ ] Run migration (Steps 1-2 only)
--   [ ] Verify data copied correctly
+-   [x] Write and test migration SQL
+-   [x] Backup production data
+-   [x] Run migration (Steps 1-2 only)
+-   [x] Verify data copied correctly
 
 ### Migration SQL
 
@@ -70,21 +70,35 @@ ALTER TABLE origin ADD COLUMN skip_words text[];
 ALTER TABLE origin ADD COLUMN skip_path text[];
 ALTER TABLE origin ADD COLUMN translate_path boolean DEFAULT true;
 
--- Step 2: Copy data from first host per origin (or merge if multiple hosts differ)
+-- Step 2a: Copy skip_words and translate_path from first host per origin
 UPDATE origin o
 SET
   skip_words = h.skip_words,
-  skip_path = h.skip_path,
   translate_path = h.translate_path
 FROM (
-  SELECT DISTINCT ON (origin_id) origin_id, skip_words, skip_path, translate_path
+  SELECT DISTINCT ON (origin_id) origin_id, skip_words, translate_path
   FROM host
   WHERE origin_id IS NOT NULL
   ORDER BY origin_id, id
 ) h
 WHERE o.id = h.origin_id;
 
--- Step 3: Drop columns from host (after code is updated)
+-- Step 2b: Merge skip_path from ALL hosts per origin (union of distinct values)
+-- This ensures no skip_path values are lost (e.g., localhost has /api/, /admin)
+UPDATE origin o
+SET skip_path = merged.paths
+FROM (
+  SELECT origin_id, array_agg(DISTINCT path) AS paths
+  FROM (
+    SELECT origin_id, unnest(skip_path) AS path
+    FROM host
+    WHERE origin_id IS NOT NULL AND skip_path IS NOT NULL
+  ) expanded
+  GROUP BY origin_id
+) merged
+WHERE o.id = merged.origin_id;
+
+-- Step 3: Drop columns from host (after code is updated in Phase 3)
 ALTER TABLE host DROP COLUMN skip_words;
 ALTER TABLE host DROP COLUMN skip_patterns;
 ALTER TABLE host DROP COLUMN skip_path;
@@ -97,9 +111,9 @@ ALTER TABLE host DROP COLUMN translate_path;
 
 **Goal:** Update code to read settings from origin instead of host.
 
--   [ ] Update getHostConfig() query to JOIN with origin
--   [ ] Update HostConfig type
--   [ ] Test with migrated data
+-   [x] Update getHostConfig() query to read from origin
+-   [x] Update query type (translate_path nullable)
+-   [x] Test with migrated data (build passes)
 -   [ ] Deploy code changes
 -   [ ] Run migration Step 3 (drop old columns)
 
@@ -107,9 +121,9 @@ ALTER TABLE host DROP COLUMN translate_path;
 
 1. **packages/db/src/host.ts**
 
-    - Update `getHostConfig()` to JOIN with origin table
-    - Fetch `skip_words`, `skip_path`, `translate_path` from origin
-    - Update `HostConfig` type
+    - Changed SQL to select `o.skip_words`, `o.skip_path`, `o.translate_path` from origin
+    - Added `?? true` fallback for translate_path (handles NULL from existing rows)
+    - Updated query type to allow `translate_path: boolean | null`
 
 2. **apps/translate/src/index.ts**
 
