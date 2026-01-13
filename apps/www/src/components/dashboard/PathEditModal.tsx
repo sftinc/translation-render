@@ -12,39 +12,34 @@ import {
 import { MissingPlaceholderToolbar } from '@/components/ui/lexical/MissingPlaceholderToolbar'
 import { validatePlaceholders, type ValidationResult } from '@/components/ui/lexical/placeholder-utils'
 import { getLanguageName } from '@pantolingo/lang'
-import {
-	saveSegmentTranslation,
-	savePathTranslation,
-	reviewSegment,
-	reviewPath,
-} from '@/actions/translations'
+import { savePathTranslation, reviewPath } from '@/actions/translations'
 
-interface EditModalProps {
-	type: 'segment' | 'path'
+interface PathEditModalProps {
 	isOpen: boolean
 	onClose: () => void
 	originId: number
-	originalText: string
-	translatedText: string | null
+	originPathId: number
+	originalPath: string
+	translatedPath: string | null
 	isReviewed: boolean
 	targetLang: string
 	onUpdate?: () => void
 }
 
-export function EditModal({
-	type,
+export function PathEditModal({
 	isOpen,
 	onClose,
 	originId,
-	originalText,
-	translatedText,
+	originPathId,
+	originalPath,
+	translatedPath,
 	isReviewed,
 	targetLang,
 	onUpdate,
-}: EditModalProps) {
+}: PathEditModalProps) {
 	const router = useRouter()
 	const [isPending, startTransition] = useTransition()
-	const [value, setValue] = useState(translatedText || '')
+	const [value, setValue] = useState(translatedPath || '')
 	const [error, setError] = useState<string | null>(null)
 	const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
 	const editorRef = useRef<PlaceholderEditorRef>(null)
@@ -52,21 +47,21 @@ export function EditModal({
 	// Reset state when modal opens with new content
 	useEffect(() => {
 		if (isOpen) {
-			setValue(translatedText || '')
+			setValue(translatedPath || '')
 			setError(null)
 			setValidationResult(null)
 		}
-	}, [isOpen, translatedText])
+	}, [isOpen, translatedPath])
 
 	// Validate on every change
 	useEffect(() => {
 		if (value.trim()) {
-			const result = validatePlaceholders(originalText, value)
+			const result = validatePlaceholders(originalPath, value)
 			setValidationResult(result)
 		} else {
 			setValidationResult(null)
 		}
-	}, [value, originalText])
+	}, [value, originalPath])
 
 	const handleSave = async () => {
 		setError(null)
@@ -78,10 +73,7 @@ export function EditModal({
 		}
 
 		startTransition(async () => {
-			const result =
-				type === 'segment'
-					? await saveSegmentTranslation(originId, targetLang, value)
-					: await savePathTranslation(originId, targetLang, value)
+			const result = await savePathTranslation(originId, originPathId, targetLang, value)
 
 			if (result.success) {
 				router.refresh()
@@ -96,10 +88,7 @@ export function EditModal({
 	const handleMarkReviewed = async () => {
 		setError(null)
 		startTransition(async () => {
-			const result =
-				type === 'segment'
-					? await reviewSegment(originId, targetLang)
-					: await reviewPath(originId, targetLang)
+			const result = await reviewPath(originId, originPathId, targetLang)
 
 			if (result.success) {
 				router.refresh()
@@ -117,31 +106,24 @@ export function EditModal({
 	}
 
 	const handleReset = () => {
-		setValue(translatedText || '')
+		setValue(translatedPath || '')
 		setError(null)
 	}
 
-	const title = type === 'segment' ? 'Edit Segment Translation' : 'Edit Path Translation'
 	const canSave = value.trim() && (!validationResult || validationResult.valid)
 
 	return (
-		<Modal isOpen={isOpen} onClose={onClose} title={title}>
+		<Modal isOpen={isOpen} onClose={onClose} title="Edit Path Translation">
 			<div className="grid grid-cols-2 gap-6">
-				{/* Original text */}
+				{/* Original path */}
 				<div>
 					<div className="mb-2 flex items-center gap-2">
 						<span className="text-sm font-medium text-[var(--text-muted)]">Original</span>
 					</div>
 					<div className="rounded-lg border border-[var(--border)] bg-[var(--page-bg)] p-4 min-h-[200px]">
-						{type === 'path' ? (
-							<code className="text-sm whitespace-pre-wrap break-all">
-								<PlaceholderText text={originalText} />
-							</code>
-						) : (
-							<p className="text-sm whitespace-pre-wrap">
-								<PlaceholderText text={originalText} />
-							</p>
-						)}
+						<code className="text-sm whitespace-pre-wrap break-all">
+							<PlaceholderText text={originalPath} />
+						</code>
 					</div>
 				</div>
 
@@ -151,7 +133,7 @@ export function EditModal({
 						<span className="text-sm font-medium text-[var(--text-muted)]">
 							{getLanguageName(targetLang)} Translation
 						</span>
-						{translatedText && (
+						{translatedPath && (
 							<Badge variant={isReviewed ? 'success' : 'warning'}>
 								{isReviewed ? 'Reviewed' : 'Pending Review'}
 							</Badge>
@@ -198,7 +180,7 @@ export function EditModal({
 				<Button variant="secondary" onClick={handleReset} disabled={isPending}>
 					Reset
 				</Button>
-				{translatedText && !isReviewed && (
+				{translatedPath && !isReviewed && (
 					<Button variant="success" onClick={handleMarkReviewed} disabled={isPending}>
 						{isPending ? 'Saving...' : 'Mark Reviewed'}
 					</Button>

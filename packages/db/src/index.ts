@@ -24,6 +24,7 @@ export {
 } from './paths.js'
 export { recordPageView, updateSegmentLastUsed, updatePathLastUsed } from './views.js'
 export {
+	canAccessOrigin,
 	getOriginsWithStats,
 	getOriginById,
 	getLangsForOrigin,

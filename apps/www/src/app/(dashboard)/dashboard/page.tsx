@@ -1,10 +1,18 @@
+import { auth } from '@/lib/auth'
+import { redirect } from 'next/navigation'
 import { getOriginsWithStats } from '@pantolingo/db'
 import { OriginCard } from '@/components/dashboard/OriginCard'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
-	const origins = await getOriginsWithStats()
+	const session = await auth()
+
+	if (!session) {
+		redirect('/login')
+	}
+
+	const origins = await getOriginsWithStats(session.user.profileId)
 
 	return (
 		<div>

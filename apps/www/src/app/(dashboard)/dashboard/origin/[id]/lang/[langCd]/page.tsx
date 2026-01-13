@@ -1,5 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
+import { auth } from '@/lib/auth'
 import {
+	canAccessOrigin,
 	getOriginById,
 	isValidLangForOrigin,
 	getPathsForOrigin,
@@ -23,6 +25,12 @@ interface LangDetailPageProps {
 }
 
 export default async function LangDetailPage({ params, searchParams }: LangDetailPageProps) {
+	const session = await auth()
+
+	if (!session) {
+		redirect('/login')
+	}
+
 	const { id, langCd } = await params
 	const { view = 'segments', filter = 'unreviewed', page = '1', path } = await searchParams
 	const originId = parseInt(id, 10)
@@ -35,6 +43,11 @@ export default async function LangDetailPage({ params, searchParams }: LangDetai
 
 	// Invalid originId - show 404
 	if (isNaN(originId)) {
+		notFound()
+	}
+
+	// Check authorization
+	if (!(await canAccessOrigin(session.user.profileId, originId))) {
 		notFound()
 	}
 
@@ -122,8 +135,8 @@ export default async function LangDetailPage({ params, searchParams }: LangDetai
 			)}
 
 			{/* Data table */}
-			{segmentData && <SegmentTable segments={segmentData.items} targetLang={langCd} />}
-			{pathData && <PathTable paths={pathData.items} targetLang={langCd} />}
+			{segmentData && <SegmentTable segments={segmentData.items} targetLang={langCd} originId={originId} />}
+			{pathData && <PathTable paths={pathData.items} targetLang={langCd} originId={originId} />}
 
 			{/* Pagination */}
 			<div className="mt-6">

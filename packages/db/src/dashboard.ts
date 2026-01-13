@@ -62,13 +62,35 @@ export interface PathOption {
 }
 
 // =============================================================================
+// Authorization
+// =============================================================================
+
+/**
+ * Check if a profile can access an origin
+ * @param profileId - Profile ID
+ * @param originId - Origin ID
+ * @returns true if the profile has access via account_profile
+ */
+export async function canAccessOrigin(profileId: number, originId: number): Promise<boolean> {
+	const result = await pool.query(
+		`SELECT 1 FROM origin o
+		 JOIN account_profile ap ON ap.account_id = o.account_id
+		 WHERE o.id = $1 AND ap.profile_id = $2
+		 LIMIT 1`,
+		[originId, profileId]
+	)
+	return (result.rowCount ?? 0) > 0
+}
+
+// =============================================================================
 // Read Queries
 // =============================================================================
 
 /**
- * Get all origins with aggregated stats for the overview page
+ * Get origins with aggregated stats for the overview page
+ * @param profileId - Filter to origins the profile has access to via account_profile
  */
-export async function getOriginsWithStats(): Promise<OriginWithStats[]> {
+export async function getOriginsWithStats(profileId: number): Promise<OriginWithStats[]> {
 	const result = await pool.query<{
 		id: number
 		domain: string
@@ -76,7 +98,8 @@ export async function getOriginsWithStats(): Promise<OriginWithStats[]> {
 		lang_count: string
 		segment_count: string
 		path_count: string
-	}>(`
+	}>(
+		`
 		SELECT
 			o.id,
 			o.domain,
@@ -85,8 +108,12 @@ export async function getOriginsWithStats(): Promise<OriginWithStats[]> {
 			(SELECT COUNT(*) FROM origin_segment os WHERE os.origin_id = o.id) as segment_count,
 			(SELECT COUNT(*) FROM origin_path op WHERE op.origin_id = o.id) as path_count
 		FROM origin o
+		JOIN account_profile ap ON ap.account_id = o.account_id
+		WHERE ap.profile_id = $1
 		ORDER BY o.domain
-	`)
+	`,
+		[profileId]
+	)
 
 	return result.rows.map((row) => ({
 		id: row.id,
@@ -100,13 +127,18 @@ export async function getOriginsWithStats(): Promise<OriginWithStats[]> {
 
 /**
  * Get a single origin by ID
+ * Note: Authorization should be checked separately with canAccessOrigin()
+ * @param originId - Origin ID
  */
 export async function getOriginById(originId: number): Promise<Origin | null> {
 	const result = await pool.query<{
 		id: number
 		domain: string
 		origin_lang: string
-	}>('SELECT id, domain, origin_lang FROM origin WHERE id = $1', [originId])
+	}>(
+		`SELECT id, domain, origin_lang FROM origin WHERE id = $1`,
+		[originId]
+	)
 
 	if (result.rows.length === 0) return null
 
@@ -369,22 +401,30 @@ export async function getPathsForLang(
 // =============================================================================
 
 /**
- * Update or insert a segment translation
+ * Update a segment translation
+ * Note: Authorization should be checked separately with canAccessOrigin()
+ * @param originId - Origin ID (for origin-segment binding validation)
+ * @param originSegmentId - Origin segment ID
+ * @param lang - Target language code
+ * @param translatedText - Translation text
+ * @returns Success status - mutation only succeeds if segment belongs to claimed origin
  */
 export async function updateSegmentTranslation(
+	originId: number,
 	originSegmentId: number,
 	lang: string,
 	translatedText: string
 ): Promise<{ success: boolean; error?: string }> {
 	try {
 		await pool.query(
-			`
-			INSERT INTO translated_segment (origin_segment_id, lang, translated_text)
-			VALUES ($1, $2, $3)
-			ON CONFLICT (origin_segment_id, lang)
-			DO UPDATE SET translated_text = $3, updated_at = NOW()
-		`,
-			[originSegmentId, lang, translatedText]
+			`UPDATE translated_segment ts
+			 SET translated_text = $4, updated_at = NOW()
+			 FROM origin_segment os
+			 WHERE ts.origin_segment_id = $2
+			   AND ts.lang = $3
+			   AND os.id = ts.origin_segment_id
+			   AND os.origin_id = $1`,
+			[originId, originSegmentId, lang, translatedText]
 		)
 		return { success: true }
 	} catch (error) {
@@ -394,22 +434,30 @@ export async function updateSegmentTranslation(
 }
 
 /**
- * Update or insert a path translation
+ * Update a path translation
+ * Note: Authorization should be checked separately with canAccessOrigin()
+ * @param originId - Origin ID (for origin-path binding validation)
+ * @param originPathId - Origin path ID
+ * @param lang - Target language code
+ * @param translatedPath - Translated path
+ * @returns Success status - mutation only succeeds if path belongs to claimed origin
  */
 export async function updatePathTranslation(
+	originId: number,
 	originPathId: number,
 	lang: string,
 	translatedPath: string
 ): Promise<{ success: boolean; error?: string }> {
 	try {
 		await pool.query(
-			`
-			INSERT INTO translated_path (origin_path_id, lang, translated_path)
-			VALUES ($1, $2, $3)
-			ON CONFLICT (origin_path_id, lang)
-			DO UPDATE SET translated_path = $3, updated_at = NOW()
-		`,
-			[originPathId, lang, translatedPath]
+			`UPDATE translated_path tp
+			 SET translated_path = $4, updated_at = NOW()
+			 FROM origin_path op
+			 WHERE tp.origin_path_id = $2
+			   AND tp.lang = $3
+			   AND op.id = tp.origin_path_id
+			   AND op.origin_id = $1`,
+			[originId, originPathId, lang, translatedPath]
 		)
 		return { success: true }
 	} catch (error) {
@@ -420,23 +468,28 @@ export async function updatePathTranslation(
 
 /**
  * Mark a segment translation as reviewed
+ * Note: Authorization should be checked separately with canAccessOrigin()
+ * @param originId - Origin ID (for origin-segment binding validation)
+ * @param originSegmentId - Origin segment ID
+ * @param lang - Target language code
+ * @returns Success status - mutation only succeeds if segment belongs to claimed origin
  */
 export async function markSegmentReviewed(
+	originId: number,
 	originSegmentId: number,
 	lang: string
 ): Promise<{ success: boolean; error?: string }> {
 	try {
-		const result = await pool.query(
-			`
-			UPDATE translated_segment
-			SET reviewed_at = NOW(), updated_at = NOW()
-			WHERE origin_segment_id = $1 AND lang = $2
-		`,
-			[originSegmentId, lang]
+		await pool.query(
+			`UPDATE translated_segment ts
+			 SET reviewed_at = NOW(), updated_at = NOW()
+			 FROM origin_segment os
+			 WHERE ts.origin_segment_id = $2
+			   AND ts.lang = $3
+			   AND os.id = ts.origin_segment_id
+			   AND os.origin_id = $1`,
+			[originId, originSegmentId, lang]
 		)
-		if (result.rowCount === 0) {
-			return { success: false, error: 'Translation not found' }
-		}
 		return { success: true }
 	} catch (error) {
 		console.error('Failed to mark segment as reviewed:', error)
@@ -446,23 +499,28 @@ export async function markSegmentReviewed(
 
 /**
  * Mark a path translation as reviewed
+ * Note: Authorization should be checked separately with canAccessOrigin()
+ * @param originId - Origin ID (for origin-path binding validation)
+ * @param originPathId - Origin path ID
+ * @param lang - Target language code
+ * @returns Success status - mutation only succeeds if path belongs to claimed origin
  */
 export async function markPathReviewed(
+	originId: number,
 	originPathId: number,
 	lang: string
 ): Promise<{ success: boolean; error?: string }> {
 	try {
-		const result = await pool.query(
-			`
-			UPDATE translated_path
-			SET reviewed_at = NOW(), updated_at = NOW()
-			WHERE origin_path_id = $1 AND lang = $2
-		`,
-			[originPathId, lang]
+		await pool.query(
+			`UPDATE translated_path tp
+			 SET reviewed_at = NOW(), updated_at = NOW()
+			 FROM origin_path op
+			 WHERE tp.origin_path_id = $2
+			   AND tp.lang = $3
+			   AND op.id = tp.origin_path_id
+			   AND op.origin_id = $1`,
+			[originId, originPathId, lang]
 		)
-		if (result.rowCount === 0) {
-			return { success: false, error: 'Translation not found' }
-		}
 		return { success: true }
 	} catch (error) {
 		console.error('Failed to mark path as reviewed:', error)

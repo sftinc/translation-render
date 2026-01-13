@@ -4,16 +4,17 @@ import { useState } from 'react'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyState } from '@/components/ui/Table'
 import { Badge } from '@/components/ui/Badge'
 import { PlaceholderText } from '@/components/ui/PlaceholderText'
-import { EditModal } from './EditModal'
+import { SegmentEditModal } from './SegmentEditModal'
 import type { SegmentWithTranslation } from '@pantolingo/db'
 
 interface SegmentTableProps {
 	segments: SegmentWithTranslation[]
 	targetLang: string
+	originId: number
 	onUpdate?: () => void
 }
 
-export function SegmentTable({ segments, targetLang, onUpdate }: SegmentTableProps) {
+export function SegmentTable({ segments, targetLang, originId, onUpdate }: SegmentTableProps) {
 	const [editingSegment, setEditingSegment] = useState<SegmentWithTranslation | null>(null)
 
 	if (segments.length === 0) {
@@ -74,11 +75,11 @@ export function SegmentTable({ segments, targetLang, onUpdate }: SegmentTablePro
 			</Table>
 
 			{editingSegment && (
-				<EditModal
-					type="segment"
+				<SegmentEditModal
 					isOpen={!!editingSegment}
 					onClose={() => setEditingSegment(null)}
-					originId={editingSegment.originSegmentId}
+					originId={originId}
+					originSegmentId={editingSegment.originSegmentId}
 					originalText={editingSegment.text}
 					translatedText={editingSegment.translatedText}
 					isReviewed={!!editingSegment.reviewedAt}

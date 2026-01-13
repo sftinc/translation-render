@@ -1,5 +1,6 @@
-import { notFound } from 'next/navigation'
-import { getOriginById, getLangsForOrigin } from '@pantolingo/db'
+import { notFound, redirect } from 'next/navigation'
+import { auth } from '@/lib/auth'
+import { canAccessOrigin, getOriginById, getLangsForOrigin } from '@pantolingo/db'
 import { getFlag } from '@pantolingo/lang'
 import { DashboardNav } from '@/components/dashboard/DashboardNav'
 import { LangTable } from '@/components/dashboard/LangTable'
@@ -11,10 +12,21 @@ interface OriginDetailPageProps {
 }
 
 export default async function OriginDetailPage({ params }: OriginDetailPageProps) {
+	const session = await auth()
+
+	if (!session) {
+		redirect('/login')
+	}
+
 	const { id } = await params
 	const originId = parseInt(id, 10)
 
 	if (isNaN(originId)) {
+		notFound()
+	}
+
+	// Check authorization
+	if (!(await canAccessOrigin(session.user.profileId, originId))) {
 		notFound()
 	}
 

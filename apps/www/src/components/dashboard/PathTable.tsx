@@ -4,16 +4,17 @@ import { useState } from 'react'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyState } from '@/components/ui/Table'
 import { Badge } from '@/components/ui/Badge'
 import { PlaceholderText } from '@/components/ui/PlaceholderText'
-import { EditModal } from './EditModal'
+import { PathEditModal } from './PathEditModal'
 import type { PathWithTranslation } from '@pantolingo/db'
 
 interface PathTableProps {
 	paths: PathWithTranslation[]
 	targetLang: string
+	originId: number
 	onUpdate?: () => void
 }
 
-export function PathTable({ paths, targetLang, onUpdate }: PathTableProps) {
+export function PathTable({ paths, targetLang, originId, onUpdate }: PathTableProps) {
 	const [editingPath, setEditingPath] = useState<PathWithTranslation | null>(null)
 
 	if (paths.length === 0) {
@@ -74,13 +75,13 @@ export function PathTable({ paths, targetLang, onUpdate }: PathTableProps) {
 			</Table>
 
 			{editingPath && (
-				<EditModal
-					type="path"
+				<PathEditModal
 					isOpen={!!editingPath}
 					onClose={() => setEditingPath(null)}
-					originId={editingPath.originPathId}
-					originalText={editingPath.path}
-					translatedText={editingPath.translatedPath}
+					originId={originId}
+					originPathId={editingPath.originPathId}
+					originalPath={editingPath.path}
+					translatedPath={editingPath.translatedPath}
 					isReviewed={!!editingPath.reviewedAt}
 					targetLang={targetLang}
 					onUpdate={onUpdate}
