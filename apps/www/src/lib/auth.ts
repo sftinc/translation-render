@@ -18,10 +18,10 @@ const authConfig = {
 		error: '/login/error',
 	},
 	callbacks: {
-		async session({ session, user }: { session: Session; user: { profileId: number } }) {
-			// Add profileId to session
+		async session({ session, user }: { session: Session; user: { accountId: number } }) {
+			// Add accountId to session
 			if (session.user) {
-				session.user.profileId = user.profileId
+				session.user.accountId = user.accountId
 			}
 			return session
 		},

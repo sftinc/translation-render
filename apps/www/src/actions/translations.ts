@@ -9,12 +9,12 @@ import {
 	markPathReviewed,
 } from '@pantolingo/db'
 
-async function requireProfileId(): Promise<number> {
+async function requireAccountId(): Promise<number> {
 	const session = await auth()
-	if (!session?.user?.profileId) {
+	if (!session?.user?.accountId) {
 		throw new Error('Unauthorized')
 	}
-	return session.user.profileId
+	return session.user.accountId
 }
 
 export async function saveSegmentTranslation(
@@ -24,9 +24,9 @@ export async function saveSegmentTranslation(
 	text: string
 ): Promise<{ success: boolean; error?: string }> {
 	try {
-		const profileId = await requireProfileId()
+		const accountId = await requireAccountId()
 
-		if (!(await canAccessWebsite(profileId, websiteId))) {
+		if (!(await canAccessWebsite(accountId, websiteId))) {
 			return { success: true } // Silent success - don't leak existence
 		}
 
@@ -43,9 +43,9 @@ export async function savePathTranslation(
 	text: string
 ): Promise<{ success: boolean; error?: string }> {
 	try {
-		const profileId = await requireProfileId()
+		const accountId = await requireAccountId()
 
-		if (!(await canAccessWebsite(profileId, websiteId))) {
+		if (!(await canAccessWebsite(accountId, websiteId))) {
 			return { success: true } // Silent success - don't leak existence
 		}
 
@@ -61,9 +61,9 @@ export async function reviewSegment(
 	lang: string
 ): Promise<{ success: boolean; error?: string }> {
 	try {
-		const profileId = await requireProfileId()
+		const accountId = await requireAccountId()
 
-		if (!(await canAccessWebsite(profileId, websiteId))) {
+		if (!(await canAccessWebsite(accountId, websiteId))) {
 			return { success: true } // Silent success - don't leak existence
 		}
 
@@ -79,9 +79,9 @@ export async function reviewPath(
 	lang: string
 ): Promise<{ success: boolean; error?: string }> {
 	try {
-		const profileId = await requireProfileId()
+		const accountId = await requireAccountId()
 
-		if (!(await canAccessWebsite(profileId, websiteId))) {
+		if (!(await canAccessWebsite(accountId, websiteId))) {
 			return { success: true } // Silent success - don't leak existence
 		}
 

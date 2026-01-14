@@ -26,7 +26,7 @@ export default async function WebsiteDetailPage({ params }: WebsiteDetailPagePro
 	}
 
 	// Check authorization
-	if (!(await canAccessWebsite(session.user.profileId, websiteId))) {
+	if (!(await canAccessWebsite(session.user.accountId, websiteId))) {
 		notFound()
 	}
 

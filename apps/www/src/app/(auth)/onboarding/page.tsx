@@ -1,11 +1,11 @@
 'use client'
 
 import { useActionState } from 'react'
-import { updateProfileName, type ProfileActionState } from '@/actions/profile'
+import { updateAccountName, type AccountActionState } from '@/actions/account'
 
 export default function OnboardingPage() {
-	const [state, formAction, isPending] = useActionState<ProfileActionState, FormData>(
-		updateProfileName,
+	const [state, formAction, isPending] = useActionState<AccountActionState, FormData>(
+		updateAccountName,
 		null
 	)
 

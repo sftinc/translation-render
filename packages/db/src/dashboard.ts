@@ -66,18 +66,15 @@ export interface PathOption {
 // =============================================================================
 
 /**
- * Check if a profile can access a website
- * @param profileId - Profile ID
+ * Check if an account can access a website
+ * @param accountId - Account ID
  * @param websiteId - Website ID
- * @returns true if the profile has access via account_profile
+ * @returns true if the account has access via account_website
  */
-export async function canAccessWebsite(profileId: number, websiteId: number): Promise<boolean> {
+export async function canAccessWebsite(accountId: number, websiteId: number): Promise<boolean> {
 	const result = await pool.query(
-		`SELECT 1 FROM website w
-		 JOIN account_profile ap ON ap.account_id = w.account_id
-		 WHERE w.id = $1 AND ap.profile_id = $2
-		 LIMIT 1`,
-		[websiteId, profileId]
+		`SELECT 1 FROM account_website WHERE website_id = $1 AND account_id = $2 LIMIT 1`,
+		[websiteId, accountId]
 	)
 	return (result.rowCount ?? 0) > 0
 }
@@ -88,9 +85,9 @@ export async function canAccessWebsite(profileId: number, websiteId: number): Pr
 
 /**
  * Get websites with aggregated stats for the overview page
- * @param profileId - Filter to websites the profile has access to via account_profile
+ * @param accountId - Filter to websites the account has access to via account_website
  */
-export async function getWebsitesWithStats(profileId: number): Promise<WebsiteWithStats[]> {
+export async function getWebsitesWithStats(accountId: number): Promise<WebsiteWithStats[]> {
 	const result = await pool.query<{
 		id: number
 		domain: string
@@ -107,12 +104,12 @@ export async function getWebsitesWithStats(profileId: number): Promise<WebsiteWi
 			(SELECT COUNT(DISTINCT target_lang) FROM host h WHERE h.website_id = w.id) as lang_count,
 			(SELECT COUNT(*) FROM translated_segment ts JOIN website_segment ws ON ws.id = ts.website_segment_id WHERE ws.website_id = w.id) as segment_count,
 			(SELECT COUNT(*) FROM translated_path tp JOIN website_path wp ON wp.id = tp.website_path_id WHERE wp.website_id = w.id AND EXISTS (SELECT 1 FROM website_path_segment wps WHERE wps.website_path_id = wp.id)) as path_count
-		FROM website w
-		JOIN account_profile ap ON ap.account_id = w.account_id
-		WHERE ap.profile_id = $1
+		FROM account_website aw
+		JOIN website w ON w.id = aw.website_id
+		WHERE aw.account_id = $1
 		ORDER BY w.domain
 	`,
-		[profileId]
+		[accountId]
 	)
 
 	return result.rows.map((row) => ({

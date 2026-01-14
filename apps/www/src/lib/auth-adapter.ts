@@ -1,17 +1,17 @@
 import { pool } from '@pantolingo/db/pool'
 import type { Adapter } from 'next-auth/adapters'
 
-interface ProfileRow {
+interface AccountRow {
 	id: number
 	email: string
 	name: string | null
 	verified_at: Date | null
 }
 
-function toAdapterUser(row: ProfileRow) {
+function toAdapterUser(row: AccountRow) {
 	return {
 		id: String(row.id),
-		profileId: row.id,
+		accountId: row.id,
 		email: row.email,
 		name: row.name,
 		emailVerified: row.verified_at ? new Date(row.verified_at) : null,
@@ -20,21 +20,21 @@ function toAdapterUser(row: ProfileRow) {
 
 /**
  * Custom NextAuth adapter for Pantolingo
- * Maps to existing profile table and auth_session/auth_token tables
+ * Maps to existing account table and auth_session/auth_token tables
  */
 export function PantolingoAdapter(): Adapter {
 	return {
 		async createUser(user) {
-			const result = await pool.query<ProfileRow>(
-				`INSERT INTO profile (email, name) VALUES ($1, $2) RETURNING id, email, name, verified_at`,
+			const result = await pool.query<AccountRow>(
+				`INSERT INTO account (email, name) VALUES ($1, $2) RETURNING id, email, name, verified_at`,
 				[user.email, user.name ?? null]
 			)
 			return toAdapterUser(result.rows[0])
 		},
 
 		async getUser(id) {
-			const result = await pool.query<ProfileRow>(
-				`SELECT id, email, name, verified_at FROM profile WHERE id = $1`,
+			const result = await pool.query<AccountRow>(
+				`SELECT id, email, name, verified_at FROM account WHERE id = $1`,
 				[parseInt(id, 10)]
 			)
 			if (!result.rows[0]) return null
@@ -42,8 +42,8 @@ export function PantolingoAdapter(): Adapter {
 		},
 
 		async getUserByEmail(email) {
-			const result = await pool.query<ProfileRow>(
-				`SELECT id, email, name, verified_at FROM profile WHERE email = $1`,
+			const result = await pool.query<AccountRow>(
+				`SELECT id, email, name, verified_at FROM account WHERE email = $1`,
 				[email]
 			)
 			if (!result.rows[0]) return null
@@ -51,8 +51,8 @@ export function PantolingoAdapter(): Adapter {
 		},
 
 		async updateUser(user) {
-			const result = await pool.query<ProfileRow>(
-				`UPDATE profile SET name = COALESCE($1, name), email = COALESCE($2, email), updated_at = NOW()
+			const result = await pool.query<AccountRow>(
+				`UPDATE account SET name = COALESCE($1, name), email = COALESCE($2, email), updated_at = NOW()
 				 WHERE id = $3 RETURNING id, email, name, verified_at`,
 				[user.name, user.email, parseInt(user.id!, 10)]
 			)
@@ -60,13 +60,13 @@ export function PantolingoAdapter(): Adapter {
 		},
 
 		async deleteUser(id) {
-			await pool.query(`DELETE FROM profile WHERE id = $1`, [parseInt(id, 10)])
+			await pool.query(`DELETE FROM account WHERE id = $1`, [parseInt(id, 10)])
 		},
 
 		// Session methods
 		async createSession(session) {
 			await pool.query(
-				`INSERT INTO auth_session (session_token, profile_id, expires) VALUES ($1, $2, $3)`,
+				`INSERT INTO auth_session (session_token, account_id, expires) VALUES ($1, $2, $3)`,
 				[session.sessionToken, parseInt(session.userId, 10), session.expires]
 			)
 			return {
@@ -79,16 +79,16 @@ export function PantolingoAdapter(): Adapter {
 		async getSessionAndUser(sessionToken) {
 			const result = await pool.query<{
 				session_token: string
-				profile_id: number
+				account_id: number
 				expires: Date
 				id: number
 				email: string
 				name: string | null
 				verified_at: Date | null
 			}>(
-				`SELECT s.session_token, s.profile_id, s.expires, p.id, p.email, p.name, p.verified_at
+				`SELECT s.session_token, s.account_id, s.expires, a.id, a.email, a.name, a.verified_at
 				 FROM auth_session s
-				 JOIN profile p ON p.id = s.profile_id
+				 JOIN account a ON a.id = s.account_id
 				 WHERE s.session_token = $1`,
 				[sessionToken]
 			)
@@ -98,12 +98,12 @@ export function PantolingoAdapter(): Adapter {
 			return {
 				session: {
 					sessionToken: row.session_token,
-					userId: String(row.profile_id),
+					userId: String(row.account_id),
 					expires: row.expires,
 				},
 				user: {
 					id: String(row.id),
-					profileId: row.id,
+					accountId: row.id,
 					email: row.email,
 					name: row.name,
 					emailVerified: row.verified_at ? new Date(row.verified_at) : null,
@@ -114,18 +114,18 @@ export function PantolingoAdapter(): Adapter {
 		async updateSession(session) {
 			const result = await pool.query<{
 				session_token: string
-				profile_id: number
+				account_id: number
 				expires: Date
 			}>(
 				`UPDATE auth_session SET expires = $1 WHERE session_token = $2
-				 RETURNING session_token, profile_id, expires`,
+				 RETURNING session_token, account_id, expires`,
 				[session.expires, session.sessionToken]
 			)
 			if (!result.rows[0]) return null
 			const row = result.rows[0]
 			return {
 				sessionToken: row.session_token,
-				userId: String(row.profile_id),
+				userId: String(row.account_id),
 				expires: row.expires,
 			}
 		},
@@ -150,14 +150,14 @@ export function PantolingoAdapter(): Adapter {
 		},
 
 		async useVerificationToken({ identifier, token }) {
-			// Single query: delete token (if valid and not expired) and update profile in one round-trip
+			// Single query: delete token (if valid and not expired) and update account in one round-trip
 			const result = await pool.query<{ identifier: string; token: string; expires: Date }>(
 				`WITH deleted_token AS (
 					DELETE FROM auth_token
 					WHERE identifier = $1 AND token = $2 AND expires > NOW()
 					RETURNING identifier, token, expires
-				), update_profile AS (
-					UPDATE profile
+				), update_account AS (
+					UPDATE account
 					SET verified_at = NOW()
 					WHERE email = $1
 					  AND verified_at IS NULL

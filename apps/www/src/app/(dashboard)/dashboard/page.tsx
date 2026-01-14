@@ -12,7 +12,7 @@ export default async function DashboardPage() {
 		redirect('/login')
 	}
 
-	const websites = await getWebsitesWithStats(session.user.profileId)
+	const websites = await getWebsitesWithStats(session.user.accountId)
 
 	return (
 		<div>

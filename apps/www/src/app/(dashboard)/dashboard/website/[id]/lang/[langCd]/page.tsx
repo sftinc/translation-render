@@ -47,7 +47,7 @@ export default async function LangDetailPage({ params, searchParams }: LangDetai
 	}
 
 	// Check authorization
-	if (!(await canAccessWebsite(session.user.profileId, websiteId))) {
+	if (!(await canAccessWebsite(session.user.accountId, websiteId))) {
 		notFound()
 	}
 

@@ -32,9 +32,10 @@ import { getWebsitesWithStats, updateSegmentTranslation } from '@pantolingo/db'
 -   `translated_path`: Translated URL paths scoped to website + language
 -   `website_path_segment`: Junction linking paths to segments (for cache invalidation)
 -   `website_path_view`: Page view analytics per path/language/date
--   `account`: Accounts (for multi-tenant billing)
--   `account_profile`: Account membership with roles
--   `profile`: User profiles (email, name)
+-   `account`: User accounts (email, name, verified_at)
+-   `account_website`: Junction linking accounts to websites with roles
+-   `auth_session`: User sessions (session_token, account_id, expires)
+-   `auth_token`: Magic link verification tokens
 
 ## Database Functions
 
