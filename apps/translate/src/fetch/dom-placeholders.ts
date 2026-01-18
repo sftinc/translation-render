@@ -149,17 +149,46 @@ export function htmlToPlaceholders(innerHTML: string, preserveWhitespace = false
 			for (let i = openTagStack.length - 1; i >= 0; i--) {
 				if (openTagStack[i].tagName === tag.tagName) {
 					const openTagInfo = openTagStack[i]
-					const closePlaceholder = openTagInfo.placeholder.replace('[', '[/')
+					const openTag = tags[openTagInfo.tagIndex]
 
-					replacements.push({
-						placeholder: openTagInfo.placeholder,
-						closePlaceholder,
-						openTag: openTagInfo.openTag,
-						closeTag: tag.fullMatch,
-						tagName: tag.tagName,
-					})
+					// Check if there's content between open and close tags
+					const contentStart = openTag.index + openTag.fullMatch.length
+					const contentBetween = result.substring(contentStart, tag.index)
 
-					tag.placeholder = closePlaceholder
+					if (contentBetween === '') {
+						// Truly empty tag (e.g., FA icon) - treat as void element
+						// Decrement the original counter to avoid gaps (opening tag already incremented it)
+						const originalType = HTML_TAG_MAP[openTagInfo.tagName]
+						tagCounters[originalType]--
+
+						tagCounters['HV'] = (tagCounters['HV'] || 0) + 1
+						const idx = tagCounters['HV']
+						const placeholder = `[HV${idx}]`
+
+						replacements.push({
+							placeholder,
+							openTag: openTag.fullMatch + tag.fullMatch,
+							tagName: openTag.tagName,
+						})
+
+						// Replace opening tag with void placeholder, mark closing for removal
+						openTag.placeholder = placeholder
+						tag.placeholder = '' // Empty string marks for removal
+					} else {
+						// Normal paired tag with content
+						const closePlaceholder = openTagInfo.placeholder.replace('[', '[/')
+
+						replacements.push({
+							placeholder: openTagInfo.placeholder,
+							closePlaceholder,
+							openTag: openTagInfo.openTag,
+							closeTag: tag.fullMatch,
+							tagName: tag.tagName,
+						})
+
+						tag.placeholder = closePlaceholder
+					}
+
 					openTagStack.splice(i, 1)
 					break
 				}
@@ -171,7 +200,7 @@ export function htmlToPlaceholders(innerHTML: string, preserveWhitespace = false
 	// Sort by index descending
 	const sortedTags = [...tags].sort((a, b) => b.index - a.index)
 	for (const tag of sortedTags) {
-		if (tag.placeholder) {
+		if (tag.placeholder !== undefined) {
 			result = result.substring(0, tag.index) + tag.placeholder + result.substring(tag.index + tag.fullMatch.length)
 		}
 	}
