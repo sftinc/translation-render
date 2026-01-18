@@ -217,6 +217,22 @@ function serializeDOMToValue(node: Node): string {
 function renderASTToHTML(nodes: ASTNode[]): string {
 	let html = ''
 
+	// Check if first node is a placeholder - need cursor anchor before it
+	const firstNode = nodes[0]
+	const needsStartAnchor =
+		firstNode &&
+		(firstNode.type === 'standalone' || firstNode.type === 'paired')
+
+	// Check if last node is a placeholder - need cursor anchor after it
+	const lastNode = nodes[nodes.length - 1]
+	const needsEndAnchor =
+		lastNode &&
+		(lastNode.type === 'standalone' || lastNode.type === 'paired')
+
+	if (needsStartAnchor) {
+		html += '<span data-cursor-anchor></span>'
+	}
+
 	for (const node of nodes) {
 		switch (node.type) {
 			case 'text':
@@ -238,6 +254,10 @@ function renderASTToHTML(nodes: ASTNode[]): string {
 				break
 			}
 		}
+	}
+
+	if (needsEndAnchor) {
+		html += '<span data-cursor-anchor></span>'
 	}
 
 	return html
