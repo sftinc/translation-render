@@ -190,6 +190,11 @@ function serializeDOMToValue(node: Node): string {
 		if (child.nodeType === Node.TEXT_NODE) {
 			result += child.textContent || ''
 		} else if (child instanceof HTMLElement) {
+			// Skip cursor anchor spans (contain ZWSP for cursor positioning)
+			if (child.dataset.cursorAnchor !== undefined) {
+				continue
+			}
+
 			const standalone = child.dataset.standalone
 			const paired = child.dataset.paired
 			const index = child.dataset.index
@@ -230,7 +235,7 @@ function renderASTToHTML(nodes: ASTNode[]): string {
 		(lastNode.type === 'standalone' || lastNode.type === 'paired')
 
 	if (needsStartAnchor) {
-		html += '<span data-cursor-anchor></span>'
+		html += '<span data-cursor-anchor>\u200B</span>'
 	}
 
 	for (const node of nodes) {
@@ -257,7 +262,7 @@ function renderASTToHTML(nodes: ASTNode[]): string {
 	}
 
 	if (needsEndAnchor) {
-		html += '<span data-cursor-anchor></span>'
+		html += '<span data-cursor-anchor>\u200B</span>'
 	}
 
 	return html
