@@ -117,14 +117,14 @@ export function PathEditModal({
 		<Modal
 			isOpen={isOpen}
 			onClose={onClose}
-			title="Edit Path Translation"
+			title="Edit Path"
 			badge={
 				<Badge variant={isReviewed ? 'success' : 'warning'}>
 					{isReviewed ? 'Reviewed' : 'Pending Review'}
 				</Badge>
 			}
 		>
-			<div className="grid grid-cols-2 gap-6">
+			<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 				{/* Original path */}
 				<div>
 					<div className="mb-2 flex items-center gap-2">
@@ -181,6 +181,7 @@ export function PathEditModal({
 				{isReviewed ? (
 					<SplitButton
 						variant="primary"
+						dropdownVariant="success"
 						primaryLabel="Save"
 						primaryOnClick={() => handleSave(null)}
 						secondaryLabel="Unreview + Save"
@@ -191,6 +192,7 @@ export function PathEditModal({
 				) : (
 					<SplitButton
 						variant="success"
+						dropdownVariant="primary"
 						primaryLabel="Reviewed + Save"
 						primaryOnClick={() => handleSave(true)}
 						secondaryLabel="Save"

@@ -5,7 +5,7 @@
 		"clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/.next && pnpm install",
 		"dev": "pnpm --parallel -r dev",
 		"dev:translate": "pnpm --filter @pantolingo/translate^... build && pnpm --filter @pantolingo/translate dev",
-		"dev:www": "pnpm --filter @pantolingo/www^... build && pnpm --filter @pantolingo/www dev",
+		"dev:www": "rm -rf apps/www/.next && pnpm --filter @pantolingo/www^... build && pnpm --filter @pantolingo/www dev",
 		"build": "pnpm -r build",
 		"build:translate": "pnpm --filter @pantolingo/translate... build",
 		"build:www": "pnpm --filter @pantolingo/www... build",

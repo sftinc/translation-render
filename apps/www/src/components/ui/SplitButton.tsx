@@ -10,6 +10,7 @@ interface SplitButtonProps {
 	secondaryLabel: string
 	secondaryOnClick: () => void
 	variant: 'primary' | 'success'
+	dropdownVariant?: 'primary' | 'success'
 	loading?: boolean
 	disabled?: boolean
 }
@@ -20,6 +21,7 @@ export function SplitButton({
 	secondaryLabel,
 	secondaryOnClick,
 	variant,
+	dropdownVariant,
 	loading = false,
 	disabled = false,
 }: SplitButtonProps) {
@@ -43,17 +45,14 @@ export function SplitButton({
 	const variantStyles = {
 		primary: {
 			button: 'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]',
-			divider: 'bg-white/20',
-			dropdown: 'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]',
 		},
 		success: {
 			button: 'bg-[var(--success)] text-white hover:opacity-90',
-			divider: 'bg-white/20',
-			dropdown: 'bg-[var(--success)] text-white hover:opacity-90',
 		},
 	}
 
 	const styles = variantStyles[variant]
+	const dropdownStyles = variantStyles[dropdownVariant || variant]
 	const isDisabled = disabled || loading
 
 	const handlePrimaryClick = () => {
@@ -83,15 +82,12 @@ export function SplitButton({
 				onClick={handlePrimaryClick}
 				disabled={isDisabled}
 				className={cn(
-					'px-4 py-2 text-sm font-medium rounded-l-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
+					'px-4 py-2 text-sm font-medium rounded-l-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-r border-white/20',
 					styles.button
 				)}
 			>
 				{loading ? <Spinner size="sm" /> : primaryLabel}
 			</button>
-
-			{/* Divider */}
-			<div className={cn('w-px self-stretch', styles.divider, isDisabled && 'opacity-50')} />
 
 			{/* Dropdown trigger */}
 			<button
@@ -129,7 +125,7 @@ export function SplitButton({
 						onClick={handleSecondaryClick}
 						className={cn(
 							'w-full px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap text-left',
-							styles.dropdown
+							dropdownStyles.button
 						)}
 					>
 						{secondaryLabel}

@@ -392,23 +392,11 @@ export const PlaceholderEditor = forwardRef<PlaceholderEditorRef, PlaceholderEdi
 					// Insert standalone token
 					document.execCommand('insertText', false, token)
 				} else if (parsed.isPaired && !parsed.isClose) {
-					// Insert paired placeholder with both tags
+					// Insert paired placeholder with default text between tags
+					// (avoids browser bug with empty inline elements)
 					const openTag = `[${parsed.kind}${parsed.index}]`
 					const closeTag = `[/${parsed.kind}${parsed.index}]`
-
-					// Get current cursor position to restore between tags
-					const cursorOffset = getCursorOffset(editorRef.current)
-
-					document.execCommand('insertText', false, openTag + closeTag)
-
-					// Position cursor between the tags
-					if (cursorOffset >= 0 && editorRef.current) {
-						requestAnimationFrame(() => {
-							if (editorRef.current) {
-								setCursorOffset(editorRef.current, cursorOffset + openTag.length)
-							}
-						})
-					}
+					document.execCommand('insertText', false, openTag + 'Text' + closeTag)
 				}
 			},
 			focus: () => {

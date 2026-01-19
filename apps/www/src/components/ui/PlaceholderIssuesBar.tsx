@@ -98,10 +98,16 @@ export function PlaceholderIssuesBar({
 	let content: React.ReactNode
 
 	if (missing.length > 0) {
-		content = (
+		// Filter out closing tags for paired placeholders (clicking open tag inserts both)
+		const missingToShow = missing.filter((token) => {
+			const parsed = parseToken(token)
+			return parsed && !parsed.isClose
+		})
+
+		content = missingToShow.length > 0 ? (
 			<div className="flex items-center gap-2 flex-wrap">
 				<span className="text-xs font-medium text-[var(--warning)]">Missing:</span>
-				{missing.map((token) => (
+				{missingToShow.map((token) => (
 					<Chip
 						key={token}
 						token={token}
@@ -110,7 +116,7 @@ export function PlaceholderIssuesBar({
 					/>
 				))}
 			</div>
-		)
+		) : null
 	} else if (extra.length > 0) {
 		content = (
 			<div className="flex items-center gap-2 flex-wrap">
