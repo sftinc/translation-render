@@ -58,7 +58,7 @@ export function Modal({ isOpen, onClose, title, children, className, badge }: Mo
 		<dialog
 			ref={dialogRef}
 			className={cn(
-				'fixed inset-y-0 inset-x-4 sm:inset-0 m-auto max-h-[85vh] w-full max-w-[calc(100%-2rem)] sm:max-w-4xl rounded-lg bg-[var(--card-bg)] text-[var(--page-fg)] p-0 shadow-[0_4px_24px_var(--shadow-color)] backdrop:bg-black/50',
+				'fixed inset-y-0 inset-x-4 m-auto max-h-[85vh] w-full max-w-[min(calc(100%-2rem),56rem)] rounded-lg bg-[var(--card-bg)] text-[var(--page-fg)] p-0 shadow-[0_4px_24px_var(--shadow-color)] backdrop:bg-black/50',
 				className
 			)}
 			onClick={handleBackdropClick}
