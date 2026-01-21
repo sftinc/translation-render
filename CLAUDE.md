@@ -92,6 +92,47 @@ Copy `.env.example` to `.env` and fill in your values. Never commit `.env` to ve
 
 See app-specific CLAUDE.md files for additional environment variables.
 
-## Testing and Linting
+## Testing
 
-No test framework or linter is currently configured. TypeScript compilation (`tsc`) is the only code quality check.
+Uses **Vitest** for unit and integration tests.
+
+```bash
+pnpm test          # Run all tests once
+pnpm test:watch    # Watch mode (re-runs on file changes)
+```
+
+### Test File Conventions
+
+- Place tests next to source files: `foo.ts` → `foo.test.ts`
+- Use `.test.ts` extension
+
+### Test-Driven Development (TDD)
+
+When requested (or when implementing complex logic), follow TDD:
+
+1. **Red**: Write a failing test first with expected input/output
+2. **Green**: Write minimum code to make the test pass
+3. **Refactor**: Clean up while keeping tests green
+
+```typescript
+// Example: foo.test.ts
+import { describe, it, expect } from 'vitest'
+import { myFunction } from './foo.js'
+
+describe('myFunction', () => {
+  it('returns expected output for given input', () => {
+    expect(myFunction('input')).toBe('expected')
+  })
+})
+```
+
+### When to Write Tests
+
+- Complex business logic or algorithms
+- Bug fixes (write test to reproduce, then fix)
+- Database queries (test with real data scenarios)
+- When the user requests TDD approach
+
+## Linting
+
+No linter currently configured. TypeScript compilation (`tsc`) is the primary code quality check.

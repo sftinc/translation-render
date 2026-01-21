@@ -2,6 +2,8 @@
 	"name": "pantolingo",
 	"private": true,
 	"scripts": {
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/.next && pnpm install",
 		"dev": "pnpm --parallel -r dev",
 		"dev:translate": "pnpm --filter @pantolingo/translate^... build && pnpm --filter @pantolingo/translate dev",
@@ -14,7 +16,8 @@
 		"start:www": "pnpm --filter @pantolingo/www start"
 	},
 	"devDependencies": {
-		"typescript": "^5.9.3"
+		"typescript": "^5.9.3",
+		"vitest": "^4.0.17"
 	},
 	"engines": {
 		"node": ">=20.0.0",
