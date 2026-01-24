@@ -66,16 +66,16 @@ export async function getTokenByCode(email: string, code: string): Promise<strin
  */
 export async function incrementFailedAttempts(email: string): Promise<number> {
 	// Increment failed_attempts on most recent token only
-	const result = await pool.query<{ id: number; failed_attempts: number }>(
+	const result = await pool.query<{ token: string; failed_attempts: number }>(
 		`UPDATE auth_token
 		 SET failed_attempts = COALESCE(failed_attempts, 0) + 1
-		 WHERE id = (
-		   SELECT id FROM auth_token
+		 WHERE token = (
+		   SELECT token FROM auth_token
 		   WHERE identifier = $1 AND expires_at > NOW()
 		   ORDER BY created_at DESC
 		   LIMIT 1
 		 )
-		 RETURNING id, failed_attempts`,
+		 RETURNING token, failed_attempts`,
 		[email]
 	)
 
@@ -84,11 +84,11 @@ export async function incrementFailedAttempts(email: string): Promise<number> {
 		return MAX_FAILED_ATTEMPTS
 	}
 
-	const { id, failed_attempts: newCount } = result.rows[0]
+	const { token, failed_attempts: newCount } = result.rows[0]
 
 	// Delete token if max attempts reached
 	if (newCount >= MAX_FAILED_ATTEMPTS) {
-		await pool.query(`DELETE FROM auth_token WHERE id = $1`, [id])
+		await pool.query(`DELETE FROM auth_token WHERE token = $1`, [token])
 	}
 
 	return newCount
@@ -222,17 +222,12 @@ export function PantolingoAdapter(): Adapter {
 
 		// Verification token methods (for magic links)
 		async createVerificationToken(token) {
-			try {
-				await pool.query(
-					`INSERT INTO auth_token (identifier, token, expires_at) VALUES ($1, $2, $3)`,
-					[token.identifier, token.token, token.expires]
-				)
-				console.log('[auth] Token created for', token.identifier)
-				return token
-			} catch (error) {
-				console.error('[auth] Token creation failed for', token.identifier)
-				throw error
-			}
+			await pool.query(
+				`INSERT INTO auth_token (identifier, token, expires_at) VALUES ($1, $2, $3)
+				 ON CONFLICT (identifier, token) DO NOTHING`,
+				[token.identifier, token.token, token.expires]
+			)
+			return token
 		},
 
 		async useVerificationToken({ identifier, token }) {
@@ -254,12 +249,10 @@ export function PantolingoAdapter(): Adapter {
 			)
 
 			if (!result.rows[0]) {
-				console.error('[auth] Token invalid, expired, or not found for', identifier)
 				return null
 			}
 
 			const row = result.rows[0]
-			console.log('[auth] Token verified for', identifier)
 			return {
 				identifier: row.identifier,
 				token: row.token,

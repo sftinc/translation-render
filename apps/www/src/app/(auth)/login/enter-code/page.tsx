@@ -46,6 +46,14 @@ function EnterCodeContent() {
 		}
 	}, [emailJwt])
 
+	// Handle successful verification - perform hard redirect
+	// (soft navigation via server redirect fails silently with NextAuth)
+	useEffect(() => {
+		if (state?.redirectUrl) {
+			window.location.href = state.redirectUrl
+		}
+	}, [state?.redirectUrl])
+
 	if (!emailJwt) {
 		return null
 	}

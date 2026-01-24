@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useActionState, useTransition } from 'react'
+import { useState, useActionState, useTransition, useRef, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { FormInput } from '@/components/ui/FormInput'
@@ -31,6 +31,7 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ turnstileSiteKey }: LoginFormProps) {
+	console.log('LoginForm turnstileSiteKey:', turnstileSiteKey ? 'present' : 'missing')
 	const searchParams = useSearchParams()
 	const callbackUrl = getSafeCallbackUrl(searchParams.get('callbackUrl'))
 	const errorParam = searchParams.get('error')
@@ -44,15 +45,23 @@ export function LoginForm({ turnstileSiteKey }: LoginFormProps) {
 	const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
 	const [showTurnstile, setShowTurnstile] = useState(false)
 	const [isPending, startTransition] = useTransition()
+	const [hasSubmitted, setHasSubmitted] = useState(false)
+	const magicLinkFormRef = useRef<HTMLFormElement>(null)
 
 	const [passwordState, passwordAction] = useActionState<AuthActionState, FormData>(
 		signInWithPassword,
 		null
 	)
 
+	const [magicLinkState, magicLinkAction, isMagicLinkPending] = useActionState<AuthActionState, FormData>(
+		sendMagicLink,
+		null
+	)
+
 	// Handle email step submission
 	const handleEmailSubmit = async (e: React.FormEvent) => {
 		e.preventDefault()
+		setHasSubmitted(true)
 		setEmailError(null)
 
 		const trimmedEmail = email.trim()
@@ -90,31 +99,26 @@ export function LoginForm({ turnstileSiteKey }: LoginFormProps) {
 
 	// Handle forgot password - show Turnstile first, then send magic link
 	const handleForgotPassword = () => {
+		console.log('handleForgotPassword - turnstileToken:', turnstileToken, 'turnstileSiteKey:', turnstileSiteKey)
 		if (!turnstileToken) {
-			// Show Turnstile widget
+			console.log('Setting showTurnstile to true')
 			setShowTurnstile(true)
 			return
 		}
-		// Turnstile already verified, send magic link
-		startTransition(async () => {
-			const formData = new FormData()
-			formData.set('email', email.trim())
-			formData.set('turnstileToken', turnstileToken)
-			await sendMagicLink(null, formData)
-		})
+		magicLinkFormRef.current?.requestSubmit()
 	}
 
-	// Called when Turnstile is verified, automatically trigger forgot password
+	// Called when Turnstile is verified
 	const handleTurnstileVerify = (token: string) => {
 		setTurnstileToken(token)
-		// Automatically send magic link after verification
-		startTransition(async () => {
-			const formData = new FormData()
-			formData.set('email', email.trim())
-			formData.set('turnstileToken', token)
-			await sendMagicLink(null, formData)
-		})
 	}
+
+	// Auto-submit magic link form when turnstile token is set
+	useEffect(() => {
+		if (turnstileToken && magicLinkFormRef.current) {
+			magicLinkFormRef.current.requestSubmit()
+		}
+	}, [turnstileToken])
 
 	// Map error codes to messages
 	const getErrorMessage = (error: string) => {
@@ -140,9 +144,10 @@ export function LoginForm({ turnstileSiteKey }: LoginFormProps) {
 		}
 	}
 
-	const successMessage = messageParam ? getSuccessMessage(messageParam) : null
+	const error = errorParam || emailError || passwordError || passwordState?.error || magicLinkState?.error
 
-	const error = errorParam || emailError || passwordError || passwordState?.error
+	// Only show success message if user hasn't submitted the form yet
+	const successMessage = !hasSubmitted && messageParam ? getSuccessMessage(messageParam) : null
 
 	return (
 		<main className="flex min-h-screen flex-col">
@@ -196,6 +201,7 @@ export function LoginForm({ turnstileSiteKey }: LoginFormProps) {
 							</button>
 						</form>
 					) : (
+						<>
 						<form action={handlePasswordSubmit}>
 							<input type="hidden" name="callbackUrl" value={callbackUrl} />
 							<input type="hidden" name="email" value={email.trim()} />
@@ -241,10 +247,10 @@ export function LoginForm({ turnstileSiteKey }: LoginFormProps) {
 								<button
 									type="button"
 									onClick={handleForgotPassword}
-									disabled={isPending}
+									disabled={isPending || isMagicLinkPending}
 									className="text-sm text-[var(--accent)] hover:underline disabled:opacity-50"
 								>
-									Forgot password?
+									{isMagicLinkPending ? 'Sending...' : 'Forgot password?'}
 								</button>
 							</div>
 
@@ -256,6 +262,13 @@ export function LoginForm({ turnstileSiteKey }: LoginFormProps) {
 
 							<SubmitButton>Login to Pantolingo</SubmitButton>
 						</form>
+
+						{/* Hidden form for magic link submission (outside password form to avoid nesting) */}
+						<form ref={magicLinkFormRef} action={magicLinkAction} className="hidden">
+							<input type="hidden" name="email" value={email.trim()} />
+							<input type="hidden" name="turnstileToken" value={turnstileToken || ''} />
+						</form>
+						</>
 					)}
 
 					<p className="mt-6 text-center text-sm text-[var(--text-muted)]">

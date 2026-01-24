@@ -74,15 +74,6 @@ const authConfig = {
 			return session
 		},
 	},
-	logger: {
-		error(error: Error) {
-			if (error.message === 'Verification') return
-			console.error('[auth]', error.message)
-		},
-		warn(code: string) {
-			console.warn('[auth]', code)
-		},
-	},
 }
 
 const nextAuth = NextAuth(authConfig)

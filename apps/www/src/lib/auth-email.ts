@@ -19,20 +19,21 @@ export function SmtpProvider(): EmailConfig {
 				throw new Error('SMTP_FROM environment variable is required for magic link authentication')
 			}
 
-			// Simplify URL to just include token
+			// Simplify URL to just include token (email looked up server-side)
 			// From: /api/auth/callback/smtp?callbackUrl=https://domain.com/dashboard&token=xxx
 			// To:   /login/magic?token=xxx
 			const parsed = new URL(url)
 			const token = parsed.searchParams.get('token')
 			const magicLinkUrl = `${parsed.origin}/login/magic?token=${token}`
 
-			// Generate and store verification code
+			// Generate and store verification code (UPSERT handles race with adapter)
 			const code = generateVerificationCode()
-			await pool.query(`UPDATE auth_token SET code = $1 WHERE identifier = $2 AND token = $3`, [
-				code,
-				identifier,
-				token,
-			])
+			await pool.query(
+				`INSERT INTO auth_token (identifier, token, expires_at, code)
+				 VALUES ($1, $2, NOW() + INTERVAL '10 minutes', $3)
+				 ON CONFLICT (identifier, token) DO UPDATE SET code = $3`,
+				[identifier, token, code]
+			)
 
 			const result = await sendEmail({
 				from: emailFrom,

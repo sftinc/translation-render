@@ -5,7 +5,7 @@ import { useSearchParams, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { SubmitButton } from '@/components/ui/SubmitButton'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
-import { sendMagicLink, type AuthActionState } from '@/actions/auth'
+import { sendMagicLink, getEmailFromJwt, type AuthActionState } from '@/actions/auth'
 
 export default function CheckEmailPage() {
 	return (
@@ -37,7 +37,7 @@ function CheckEmailContent() {
 
 	const [state, formAction] = useActionState<AuthActionState, FormData>(sendMagicLink, null)
 
-	// Verify JWT and extract email
+	// Verify JWT and extract email via server action
 	useEffect(() => {
 		async function verifyJwt() {
 			if (!emailJwt) {
@@ -46,9 +46,8 @@ function CheckEmailContent() {
 			}
 
 			try {
-				// Import verifyEmailJwt dynamically to avoid client-side issues
-				const { verifyEmailJwt } = await import('@/lib/auth-jwt')
-				const extractedEmail = await verifyEmailJwt(emailJwt)
+				// Use server action to verify JWT (AUTH_SECRET not available client-side)
+				const extractedEmail = await getEmailFromJwt(emailJwt)
 
 				if (!extractedEmail) {
 					redirect('/login')

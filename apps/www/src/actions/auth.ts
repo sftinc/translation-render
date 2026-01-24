@@ -9,7 +9,7 @@ import { createEmailJwt, verifyEmailJwt } from '@/lib/auth-jwt'
 import { isValidCodeFormat } from '@/lib/auth-code'
 import { getTokenByCode, incrementFailedAttempts } from '@/lib/auth-adapter'
 
-export type AuthActionState = { error?: string } | null
+export type AuthActionState = { error?: string; redirectUrl?: string } | null
 
 /**
  * Check if an email exists in the database
@@ -142,8 +142,21 @@ export async function verifyCode(
 		return { error: 'Invalid or expired code. Please try again or request a new code.' }
 	}
 
-	// Redirect to existing NextAuth flow
-	redirect(`/login/magic?token=${encodeURIComponent(token)}`)
+	// Return redirect URL for client-side hard navigation
+	// (server-side redirect causes soft navigation which fails silently with NextAuth)
+	return { redirectUrl: `/login/magic?token=${encodeURIComponent(token)}` }
+}
+
+/**
+ * Verify an email JWT and return the email address
+ * Used by client components that need to display the email
+ *
+ * @param jwt - The JWT token from the URL
+ * @returns The email address if valid, null otherwise
+ */
+export async function getEmailFromJwt(jwt: string): Promise<string | null> {
+	if (!jwt) return null
+	return verifyEmailJwt(jwt)
 }
 
 /**
