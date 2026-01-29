@@ -520,7 +520,7 @@ export async function updateSegmentTranslation(
 				changes,
 			}
 			await client.query(
-				`INSERT INTO website_audit_log (website_id, account_id, type, details)
+				`INSERT INTO log_activity (website_id, account_id, type, details)
 				 VALUES ($1, $2, $3, $4)`,
 				[websiteId, accountId, 'segment_edit', JSON.stringify(details)]
 			)
@@ -621,7 +621,7 @@ export async function updatePathTranslation(
 				changes,
 			}
 			await client.query(
-				`INSERT INTO website_audit_log (website_id, account_id, type, details)
+				`INSERT INTO log_activity (website_id, account_id, type, details)
 				 VALUES ($1, $2, $3, $4)`,
 				[websiteId, accountId, 'path_edit', JSON.stringify(details)]
 			)

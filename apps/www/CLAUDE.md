@@ -116,7 +116,7 @@ The `PlaceholderEditor` component renders and validates placeholders in translat
 
 ## Activity Tracking
 
-Translation edits are tracked in the `website_audit_log` table. Activity records are created when translation text or reviewed status changes.
+Translation edits are tracked in the `log_activity` table. Activity records are created when translation text or reviewed status changes.
 
 ### Activity Types
 

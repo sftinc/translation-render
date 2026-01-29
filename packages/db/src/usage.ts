@@ -16,7 +16,7 @@ export async function recordLlmUsage(records: LlmUsageRecord[]): Promise<void> {
 
 	try {
 		await pool.query(
-			`INSERT INTO website_llm_usage (website_id, feature, usage_date, prompt_tokens, completion_tokens, total_cost, api_calls)
+			`INSERT INTO stats_llm_usage (website_id, feature, usage_date, prompt_tokens, completion_tokens, total_cost, api_calls)
        SELECT
          unnest($1::int[]),
          unnest($2::text[]),
@@ -27,10 +27,10 @@ export async function recordLlmUsage(records: LlmUsageRecord[]): Promise<void> {
          unnest($6::int[])
        ON CONFLICT (website_id, feature, usage_date)
        DO UPDATE SET
-         prompt_tokens = website_llm_usage.prompt_tokens + EXCLUDED.prompt_tokens,
-         completion_tokens = website_llm_usage.completion_tokens + EXCLUDED.completion_tokens,
-         total_cost = website_llm_usage.total_cost + EXCLUDED.total_cost,
-         api_calls = website_llm_usage.api_calls + EXCLUDED.api_calls,
+         prompt_tokens = stats_llm_usage.prompt_tokens + EXCLUDED.prompt_tokens,
+         completion_tokens = stats_llm_usage.completion_tokens + EXCLUDED.completion_tokens,
+         total_cost = stats_llm_usage.total_cost + EXCLUDED.total_cost,
+         api_calls = stats_llm_usage.api_calls + EXCLUDED.api_calls,
          updated_at = NOW()`,
 			[
 				valid.map((r) => r.websiteId),

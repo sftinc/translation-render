@@ -11,10 +11,10 @@ export async function recordPageView(
 ): Promise<void> {
 	try {
 		await pool.query(
-			`INSERT INTO website_path_view (website_path_id, lang, view_date, hit_count)
+			`INSERT INTO stats_page_view (website_path_id, lang, view_date, hit_count)
 			 VALUES ($1, $2, CURRENT_DATE, 1)
 			 ON CONFLICT (website_path_id, lang, view_date)
-			 DO UPDATE SET hit_count = website_path_view.hit_count + 1`,
+			 DO UPDATE SET hit_count = stats_page_view.hit_count + 1`,
 			[websitePathId, lang]
 		)
 	} catch (error) {
