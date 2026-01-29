@@ -114,6 +114,48 @@ The `PlaceholderEditor` component renders and validates placeholders in translat
 - `components/ui/placeholder-shared.ts` - Labels, colors, tokenizer, AST parser
 - `components/ui/placeholder-utils.ts` - Validation logic
 
+## Activity Tracking
+
+Translation edits are tracked in the `website_audit_log` table. Activity records are only created when the translation text actually changes (not on review-only updates or saves with identical text).
+
+### Activity Types
+
+| Type | Description |
+| ---- | ----------- |
+| `segment_edit` | Segment translation text changed |
+| `path_edit` | Path translation text changed |
+
+### Details Schema
+
+```typescript
+// segment_edit
+{
+  translation_segment_id: number
+  lang: string
+  changes: {
+    text?: { old: string, new: string }
+    reviewed?: { old: boolean, new: boolean }
+  }
+}
+
+// path_edit
+{
+  translation_path_id: number
+  lang: string
+  changes: {
+    text?: { old: string, new: string }
+    reviewed?: { old: boolean, new: boolean }
+  }
+}
+```
+
+Activity is logged when text OR reviewed status changes (or both). Both keys are optional.
+
+### Key Files
+
+- `actions/translations.ts` - Server actions that pass `accountId` to DB functions
+- `packages/db/src/dashboard.ts` - `updateSegmentTranslation()`, `updatePathTranslation()` handle activity insertion
+
 ## Environment Variables
 
 | Variable                | Default | Description                                       |

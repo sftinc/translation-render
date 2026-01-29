@@ -67,6 +67,33 @@ export interface PathOption {
 	path: string
 }
 
+// Activity types for tracking translation edits
+export type ActivityType = 'segment_edit' | 'path_edit'
+
+export interface ActivityChange<T> {
+	old: T
+	new: T
+}
+
+export interface EditChanges {
+	text?: ActivityChange<string>
+	reviewed?: ActivityChange<boolean>
+}
+
+export interface SegmentEditDetails {
+	translation_segment_id: number
+	lang: string
+	changes: EditChanges
+}
+
+export interface PathEditDetails {
+	translation_path_id: number
+	lang: string
+	changes: EditChanges
+}
+
+export type ActivityDetails = SegmentEditDetails | PathEditDetails
+
 // =============================================================================
 // Authorization
 // =============================================================================
@@ -417,6 +444,7 @@ export async function getPathsForLang(
  * @param lang - Target language code
  * @param translatedText - Translation text
  * @param reviewed - Optional: true=mark reviewed, false=unmark, null/undefined=no change
+ * @param accountId - Account ID for activity tracking
  * @returns Success status - mutation only succeeds if segment belongs to claimed website
  */
 export async function updateSegmentTranslation(
@@ -424,10 +452,38 @@ export async function updateSegmentTranslation(
 	websiteSegmentId: number,
 	lang: string,
 	translatedText: string,
-	reviewed?: boolean | null
+	reviewed: boolean | null | undefined,
+	accountId: number
 ): Promise<{ success: boolean; error?: string }> {
+	const client = await pool.connect()
 	try {
-		await pool.query(
+		await client.query('BEGIN')
+
+		// Get current translation state
+		const selectResult = await client.query<{
+			id: number
+			translated_text: string | null
+			reviewed_at: Date | null
+		}>(
+			`SELECT ts.id, ts.translated_text, ts.reviewed_at
+			 FROM translation_segment ts
+			 JOIN website_segment ws ON ws.id = ts.website_segment_id
+			 WHERE ts.website_segment_id = $1
+			   AND ts.lang = $2
+			   AND ws.website_id = $3`,
+			[websiteSegmentId, lang, websiteId]
+		)
+
+		const row = selectResult.rows[0]
+		const translationSegmentId = row?.id
+		const previousText = row?.translated_text ?? ''
+		const wasReviewed = row?.reviewed_at !== null
+
+		const textChanged = previousText !== translatedText
+		const reviewedChanged = reviewed !== null && reviewed !== undefined && reviewed !== wasReviewed
+
+		// Update the translation
+		await client.query(
 			`UPDATE translation_segment ts
 			 SET translated_text = $4,
 			     updated_at = NOW(),
@@ -443,10 +499,36 @@ export async function updateSegmentTranslation(
 			   AND ws.website_id = $1`,
 			[websiteId, websiteSegmentId, lang, translatedText, reviewed]
 		)
+
+		// Insert activity record if text or reviewed changed
+		if ((textChanged || reviewedChanged) && translationSegmentId) {
+			const changes: EditChanges = {}
+			if (textChanged) {
+				changes.text = { old: previousText, new: translatedText }
+			}
+			if (reviewedChanged) {
+				changes.reviewed = { old: wasReviewed, new: reviewed }
+			}
+			const details: SegmentEditDetails = {
+				translation_segment_id: translationSegmentId,
+				lang,
+				changes,
+			}
+			await client.query(
+				`INSERT INTO website_audit_log (website_id, account_id, type, details)
+				 VALUES ($1, $2, $3, $4)`,
+				[websiteId, accountId, 'segment_edit', JSON.stringify(details)]
+			)
+		}
+
+		await client.query('COMMIT')
 		return { success: true }
 	} catch (error) {
+		await client.query('ROLLBACK')
 		console.error('Failed to update segment translation:', error)
 		return { success: false, error: 'Failed to update translation' }
+	} finally {
+		client.release()
 	}
 }
 
@@ -458,6 +540,7 @@ export async function updateSegmentTranslation(
  * @param lang - Target language code
  * @param translatedPath - Translated path
  * @param reviewed - Optional: true=mark reviewed, false=unmark, null/undefined=no change
+ * @param accountId - Account ID for activity tracking
  * @returns Success status - mutation only succeeds if path belongs to claimed website
  */
 export async function updatePathTranslation(
@@ -465,10 +548,38 @@ export async function updatePathTranslation(
 	websitePathId: number,
 	lang: string,
 	translatedPath: string,
-	reviewed?: boolean | null
+	reviewed: boolean | null | undefined,
+	accountId: number
 ): Promise<{ success: boolean; error?: string }> {
+	const client = await pool.connect()
 	try {
-		await pool.query(
+		await client.query('BEGIN')
+
+		// Get current translation state
+		const selectResult = await client.query<{
+			id: number
+			translated_path: string | null
+			reviewed_at: Date | null
+		}>(
+			`SELECT tp.id, tp.translated_path, tp.reviewed_at
+			 FROM translation_path tp
+			 JOIN website_path wp ON wp.id = tp.website_path_id
+			 WHERE tp.website_path_id = $1
+			   AND tp.lang = $2
+			   AND wp.website_id = $3`,
+			[websitePathId, lang, websiteId]
+		)
+
+		const row = selectResult.rows[0]
+		const translationPathId = row?.id
+		const previousPath = row?.translated_path ?? ''
+		const wasReviewed = row?.reviewed_at !== null
+
+		const textChanged = previousPath !== translatedPath
+		const reviewedChanged = reviewed !== null && reviewed !== undefined && reviewed !== wasReviewed
+
+		// Update the translation
+		await client.query(
 			`UPDATE translation_path tp
 			 SET translated_path = $4,
 			     updated_at = NOW(),
@@ -484,72 +595,36 @@ export async function updatePathTranslation(
 			   AND wp.website_id = $1`,
 			[websiteId, websitePathId, lang, translatedPath, reviewed]
 		)
+
+		// Insert activity record if text or reviewed changed
+		if ((textChanged || reviewedChanged) && translationPathId) {
+			const changes: EditChanges = {}
+			if (textChanged) {
+				changes.text = { old: previousPath, new: translatedPath }
+			}
+			if (reviewedChanged) {
+				changes.reviewed = { old: wasReviewed, new: reviewed }
+			}
+			const details: PathEditDetails = {
+				translation_path_id: translationPathId,
+				lang,
+				changes,
+			}
+			await client.query(
+				`INSERT INTO website_audit_log (website_id, account_id, type, details)
+				 VALUES ($1, $2, $3, $4)`,
+				[websiteId, accountId, 'path_edit', JSON.stringify(details)]
+			)
+		}
+
+		await client.query('COMMIT')
 		return { success: true }
 	} catch (error) {
+		await client.query('ROLLBACK')
 		console.error('Failed to update path translation:', error)
 		return { success: false, error: 'Failed to update translation' }
-	}
-}
-
-/**
- * Mark a segment translation as reviewed
- * Note: Authorization should be checked separately with canAccessWebsite()
- * @param websiteId - Website ID (for website-segment binding validation)
- * @param websiteSegmentId - Website segment ID
- * @param lang - Target language code
- * @returns Success status - mutation only succeeds if segment belongs to claimed website
- */
-export async function markSegmentReviewed(
-	websiteId: number,
-	websiteSegmentId: number,
-	lang: string
-): Promise<{ success: boolean; error?: string }> {
-	try {
-		await pool.query(
-			`UPDATE translation_segment ts
-			 SET reviewed_at = NOW(), updated_at = NOW()
-			 FROM website_segment ws
-			 WHERE ts.website_segment_id = $2
-			   AND ts.lang = $3
-			   AND ws.id = ts.website_segment_id
-			   AND ws.website_id = $1`,
-			[websiteId, websiteSegmentId, lang]
-		)
-		return { success: true }
-	} catch (error) {
-		console.error('Failed to mark segment as reviewed:', error)
-		return { success: false, error: 'Failed to mark as reviewed' }
-	}
-}
-
-/**
- * Mark a path translation as reviewed
- * Note: Authorization should be checked separately with canAccessWebsite()
- * @param websiteId - Website ID (for website-path binding validation)
- * @param websitePathId - Website path ID
- * @param lang - Target language code
- * @returns Success status - mutation only succeeds if path belongs to claimed website
- */
-export async function markPathReviewed(
-	websiteId: number,
-	websitePathId: number,
-	lang: string
-): Promise<{ success: boolean; error?: string }> {
-	try {
-		await pool.query(
-			`UPDATE translation_path tp
-			 SET reviewed_at = NOW(), updated_at = NOW()
-			 FROM website_path wp
-			 WHERE tp.website_path_id = $2
-			   AND tp.lang = $3
-			   AND wp.id = tp.website_path_id
-			   AND wp.website_id = $1`,
-			[websiteId, websitePathId, lang]
-		)
-		return { success: true }
-	} catch (error) {
-		console.error('Failed to mark path as reviewed:', error)
-		return { success: false, error: 'Failed to mark as reviewed' }
+	} finally {
+		client.release()
 	}
 }
 
