@@ -50,3 +50,5 @@ export {
 	type PathEditDetails,
 	type ActivityDetails,
 } from './dashboard.js'
+export { recordLlmUsage } from './usage.js'
+export type { LlmFeature, TokenUsage, LlmUsageRecord } from './types.js'

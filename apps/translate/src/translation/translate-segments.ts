@@ -3,10 +3,17 @@
  * Handles deduplication, chunking, skip words, and batch translation
  */
 
+import type { TokenUsage } from '@pantolingo/db'
 import { Content, SkipWordReplacement, TranslateStats, TranslationItem } from '../types.js'
 import { reconstructTranslations, preprocessForTranslation } from './deduplicator.js'
 import { replaceSkipWords, restoreSkipWords } from './skip-words.js'
 import { translateBatch, TranslationStyle } from './translate.js'
+
+/** TranslateStats extended with LLM usage tracking */
+export interface TranslateStatsWithUsage extends TranslateStats {
+	usage: TokenUsage
+	apiCallCount: number
+}
 
 /**
  * Translate content items using OpenRouter API
@@ -27,12 +34,14 @@ export async function translateSegments(
 	serviceAccountJson: string,
 	skipWords?: string[],
 	style: TranslationStyle = 'balanced'
-): Promise<TranslateStats> {
+): Promise<TranslateStatsWithUsage> {
 	if (segments.length === 0) {
 		return {
 			translations: [],
 			uniqueCount: 0,
 			batchCount: 0,
+			usage: { promptTokens: 0, completionTokens: 0, cost: 0 },
+			apiCallCount: 0,
 		}
 	}
 
@@ -67,13 +76,15 @@ export async function translateSegments(
 		}))
 
 		// Translate all items in parallel with type-specific prompts
-		const translatedUnique = await translateBatch(
+		const batchResult = await translateBatch(
 			translationItems,
 			sourceLanguageCode,
 			targetLanguageCode,
 			serviceAccountJson,
 			style
 		)
+
+		const translatedUnique = batchResult.translations
 
 		// Restore skip words in translations
 		if (skipWords && skipWords.length > 0) {
@@ -91,6 +102,8 @@ export async function translateSegments(
 			translations: finalTranslations,
 			uniqueCount: totalUnique,
 			batchCount: chunks.length,
+			usage: batchResult.totalUsage,
+			apiCallCount: batchResult.apiCallCount,
 		}
 	} catch (error) {
 		throw new Error(`Failed to translate content: ${error instanceof Error ? error.message : String(error)}`)

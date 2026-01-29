@@ -4,6 +4,7 @@
  */
 
 import { PATHNAME_PROMPT, SEGMENT_PROMPT } from './prompts.js'
+import type { TokenUsage } from '@pantolingo/db'
 
 export interface TranslationItem {
 	text: string
@@ -11,6 +12,17 @@ export interface TranslationItem {
 }
 
 export type TranslationStyle = 'literal' | 'balanced' | 'natural'
+
+interface TranslateSingleResult {
+	translation: string
+	usage: TokenUsage
+}
+
+export interface TranslateBatchResult {
+	translations: string[]
+	totalUsage: TokenUsage
+	apiCallCount: number
+}
 
 const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
 const MODEL = 'anthropic/claude-haiku-4.5'
@@ -32,7 +44,7 @@ async function translateSingle(
 	targetLanguageCode: string,
 	apiKey: string,
 	style: TranslationStyle = 'balanced'
-): Promise<string> {
+): Promise<TranslateSingleResult> {
 	const prompt = type === 'segment' ? SEGMENT_PROMPT : PATHNAME_PROMPT
 	const startTime = Date.now()
 
@@ -89,10 +101,21 @@ async function translateSingle(
 			throw new Error(`Unexpected response format: ${JSON.stringify(data)}`)
 		}
 
+		// Warn if cost is missing (detect silent data loss)
+		if (data.usage?.cost === undefined) {
+			console.warn('[LLM Usage] Missing cost in OpenRouter response')
+		}
+
+		const usage: TokenUsage = {
+			promptTokens: data.usage?.prompt_tokens ?? 0,
+			completionTokens: data.usage?.completion_tokens ?? 0,
+			cost: data.usage?.cost ?? 0,
+		}
+
 		const translatedText = data.choices[0].message.content.trim()
 		const duration = Date.now() - startTime
 		// console.log(`[Translation Single] Type: ${type}, Duration: ${duration}ms, Result: "${translatedText.substring(0, 100)}${translatedText.length > 100 ? '...' : ''}"`)
-		return translatedText
+		return { translation: translatedText, usage }
 	} catch (error) {
 		// console.error(`Translation failed for "${text}":`, error)
 		throw error
@@ -115,11 +138,15 @@ export async function translateBatch(
 	targetLanguageCode: string,
 	apiKey: string,
 	style: TranslationStyle = 'balanced'
-): Promise<string[]> {
+): Promise<TranslateBatchResult> {
 	const startTime = Date.now()
 
 	if (items.length === 0) {
-		return []
+		return {
+			translations: [],
+			totalUsage: { promptTokens: 0, completionTokens: 0, cost: 0 },
+			apiCallCount: 0,
+		}
 	}
 
 	// console.log(`[translateBatch] Starting ${items.length} parallel API calls`)
@@ -131,9 +158,23 @@ export async function translateBatch(
 
 	const results = await Promise.all(translationPromises)
 
+	// Aggregate usage across all API calls
+	const totalUsage = results.reduce(
+		(acc, r) => ({
+			promptTokens: acc.promptTokens + r.usage.promptTokens,
+			completionTokens: acc.completionTokens + r.usage.completionTokens,
+			cost: acc.cost + r.usage.cost,
+		}),
+		{ promptTokens: 0, completionTokens: 0, cost: 0 }
+	)
+
 	const duration = Date.now() - startTime
 	// console.log(`[translateBatch] COMPLETED - Total duration: ${duration}ms, API calls: ${items.length}`)
 
-	return results
+	return {
+		translations: results.map((r) => r.translation),
+		totalUsage,
+		apiCallCount: items.length,
+	}
 }
 

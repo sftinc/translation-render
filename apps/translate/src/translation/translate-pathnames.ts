@@ -5,8 +5,16 @@
  * Example: /products/item-123 → /products/item-[N1] → translate → /productos/articulo-[N1] → /productos/articulo-123
  */
 
+import type { TokenUsage } from '@pantolingo/db'
 import type { PatternReplacement, Content, PathnameMapping } from '../types.js'
 import { applyPatterns, restorePatterns } from './skip-patterns.js'
+
+/** Result from translateFn with usage tracking */
+export interface TranslateFnResult {
+	translations: string[]
+	usage: TokenUsage
+	apiCallCount: number
+}
 
 /**
  * Normalize a pathname by applying pattern replacements (numeric, PII, etc.)
@@ -170,17 +178,19 @@ export async function translatePathname(
  * @param pathnameMapping - Pre-fetched pathname mapping cache (key: normalized original, value: normalized translated)
  * @param translateFn - Function to translate array of segments (called once with all uncached pathnames)
  * @param skipPath - Path patterns to skip translation
- * @returns Object with { pathnameMap, newSegments, newTranslations } for caching
+ * @returns Object with { pathnameMap, newSegments, newTranslations, usage, apiCallCount } for caching
  */
 export async function translatePathnamesBatch(
 	pathnames: Set<string>,
 	pathnameMapping: PathnameMapping | null,
-	translateFn: (segments: Content[]) => Promise<string[]>,
+	translateFn: (segments: Content[]) => Promise<TranslateFnResult>,
 	skipPath: (string | RegExp)[] | undefined
 ): Promise<{
 	pathnameMap: Map<string, string>
 	newSegments: Content[]
 	newTranslations: string[]
+	usage: TokenUsage
+	apiCallCount: number
 }> {
 	const pathnameMap = new Map<string, string>()
 	const uncachedPathnames: Array<{
@@ -222,6 +232,8 @@ export async function translatePathnamesBatch(
 			pathnameMap,
 			newSegments: [],
 			newTranslations: [],
+			usage: { promptTokens: 0, completionTokens: 0, cost: 0 },
+			apiCallCount: 0,
 		}
 	}
 
@@ -231,7 +243,7 @@ export async function translatePathnamesBatch(
 		value: p.normalized,
 	}))
 
-	const translatedNormalized = await translateFn(segmentsToTranslate)
+	const translateResult = await translateFn(segmentsToTranslate)
 
 	// Process translated results and add to pathnameMap
 	const newSegments: Content[] = []
@@ -239,7 +251,7 @@ export async function translatePathnamesBatch(
 
 	for (let i = 0; i < uncachedPathnames.length; i++) {
 		const { original, replacements } = uncachedPathnames[i]
-		const translatedNorm = translatedNormalized[i]
+		const translatedNorm = translateResult.translations[i]
 
 		// Denormalize the translated pathname (restore placeholders)
 		const denormalized = denormalizePathname(translatedNorm, replacements)
@@ -254,5 +266,7 @@ export async function translatePathnamesBatch(
 		pathnameMap,
 		newSegments,
 		newTranslations,
+		usage: translateResult.usage,
+		apiCallCount: translateResult.apiCallCount,
 	}
 }

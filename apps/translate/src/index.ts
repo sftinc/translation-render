@@ -37,8 +37,10 @@ import {
 	recordPageView,
 	updateSegmentLastUsed,
 	updatePathLastUsed,
+	recordLlmUsage,
 	type TranslationItem,
 	type PathnameMapping,
+	type LlmUsageRecord,
 } from '@pantolingo/db'
 
 /**
@@ -55,6 +57,7 @@ interface DeferredWrites {
 	cachedPaths: string[]
 	websitePathId?: number // ID from stage 1 lookup (for existing paths)
 	statusCode: number // Website response status code
+	llmUsage: LlmUsageRecord[]
 }
 
 /**
@@ -62,7 +65,7 @@ interface DeferredWrites {
  * All operations are non-blocking and errors are logged but don't affect the response
  */
 async function executeDeferredWrites(writes: DeferredWrites): Promise<void> {
-	const { websiteId, lang, translations, pathnames, currentPath, newSegmentHashes, cachedSegmentHashes, cachedPaths, websitePathId, statusCode } =
+	const { websiteId, lang, translations, pathnames, currentPath, newSegmentHashes, cachedSegmentHashes, cachedPaths, websitePathId, statusCode, llmUsage } =
 		writes
 
 	const isErrorResponse = statusCode >= 400
@@ -71,6 +74,11 @@ async function executeDeferredWrites(writes: DeferredWrites): Promise<void> {
 		// 1. Upsert translations (cache for future requests - even for error pages)
 		if (translations.length > 0) {
 			await batchUpsertTranslations(websiteId, lang, translations)
+		}
+
+		// 2. Record LLM usage (fire-and-forget, non-blocking)
+		if (llmUsage.length > 0) {
+			recordLlmUsage(llmUsage)
 		}
 
 		// Skip path operations for error responses (4xx, 5xx)
@@ -423,6 +431,7 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 				cachedPaths: [],
 				websitePathId: pathnameResult?.websitePathId,
 				statusCode: originResponse.status,
+				llmUsage: [],
 			}
 
 			// Fetch HTML content for translation
@@ -498,7 +507,13 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 								translationConfig.skipWords,
 								'balanced' // TODO: Use translationConfig.style after DB migration
 						  )
-						: Promise.resolve({ translations: [], uniqueCount: 0, batchCount: 0 })
+						: Promise.resolve({
+								translations: [],
+								uniqueCount: 0,
+								batchCount: 0,
+								usage: { promptTokens: 0, completionTokens: 0, cost: 0 },
+								apiCallCount: 0,
+						  })
 
 				// Pathname translation: batch current + links together for efficiency
 				const pathnamePromise = async () => {
@@ -508,6 +523,8 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 					let pathnameSegments: Content[] = []
 					let pathnameTranslations: string[] = []
 					let totalPaths = 0
+					let pathnameUsage = { promptTokens: 0, completionTokens: 0, cost: 0 }
+					let pathnameApiCallCount = 0
 
 					// Skip path translation for error responses or if disabled
 					if (!translationConfig.translatePath || isErrorResponse) {
@@ -518,6 +535,8 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 							pathnameSegments,
 							pathnameTranslations,
 							totalPaths,
+							usage: pathnameUsage,
+							apiCallCount: pathnameApiCallCount,
 						}
 					}
 
@@ -537,6 +556,8 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 								pathnameSegments,
 								pathnameTranslations,
 								totalPaths,
+								usage: pathnameUsage,
+								apiCallCount: pathnameApiCallCount,
 							}
 						}
 
@@ -585,7 +606,11 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 									translationConfig.skipWords,
 									'balanced'
 								)
-								return result.translations
+								return {
+									translations: result.translations,
+									usage: result.usage,
+									apiCallCount: result.apiCallCount,
+								}
 							},
 							translationConfig.skipPath
 						)
@@ -602,6 +627,8 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 						pathnameMap = batchResult.pathnameMap
 						pathnameSegments = batchResult.newSegments
 						pathnameTranslations = batchResult.newTranslations
+						pathnameUsage = batchResult.usage
+						pathnameApiCallCount = batchResult.apiCallCount
 					} catch (error) {
 						console.error('[Pathname Translation] Failed:', error)
 						// Continue with original pathname
@@ -614,6 +641,8 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 						pathnameSegments,
 						pathnameTranslations,
 						totalPaths,
+						usage: pathnameUsage,
+						apiCallCount: pathnameApiCallCount,
 					}
 				}
 
@@ -634,6 +663,28 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 					const pathnameTranslations = pathnameResult.pathnameTranslations
 					totalPaths = pathnameResult.totalPaths
 					newPaths = pathnameTranslations.length
+
+					// Collect LLM usage for deferred write
+					if (segmentResult.apiCallCount > 0) {
+						deferredWrites.llmUsage.push({
+							websiteId: translationConfig.websiteId,
+							feature: 'segment_translation',
+							promptTokens: segmentResult.usage.promptTokens,
+							completionTokens: segmentResult.usage.completionTokens,
+							cost: segmentResult.usage.cost,
+							apiCalls: segmentResult.apiCallCount,
+						})
+					}
+					if (pathnameResult.apiCallCount > 0) {
+						deferredWrites.llmUsage.push({
+							websiteId: translationConfig.websiteId,
+							feature: 'path_translation',
+							promptTokens: pathnameResult.usage.promptTokens,
+							completionTokens: pathnameResult.usage.completionTokens,
+							cost: pathnameResult.usage.cost,
+							apiCalls: pathnameResult.apiCallCount,
+						})
+					}
 
 					// 8. Merge cached + new translations in original order
 					const allTranslations = new Array(extractedSegments.length).fill('')
