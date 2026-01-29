@@ -1,0 +1,261 @@
+{
+  "timestamp": "2026-01-29T17:05:13.077Z",
+  "sourceLanguage": "en-us",
+  "targetLanguage": "es-mx",
+  "mode": "live",
+  "segments": [
+    {
+      "name": "basic-translation",
+      "description": "Basic text should be translated",
+      "input": "Add to Cart",
+      "style": "balanced",
+      "expectedMock": "Agregar al carrito",
+      "v1Output": "Agregar al carrito",
+      "v2Output": "Agregar al carrito",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "numeric-placeholder",
+      "description": "Numeric placeholders [N1] should be preserved",
+      "input": "Price: [N1] USD",
+      "style": "balanced",
+      "expectedMock": "Precio: [N1] USD",
+      "v1Output": "Precio: [N1] USD",
+      "v2Output": "Precio: [N1] USD",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "skip-word-placeholder",
+      "description": "Skip word placeholders [S1] should be preserved",
+      "input": "Welcome to [S1]",
+      "style": "balanced",
+      "expectedMock": "Bienvenido a [S1]",
+      "v1Output": "Bienvenido a [S1]",
+      "v2Output": "Bienvenido a [S1]",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "paired-placeholder",
+      "description": "Paired placeholders [HA1]...[/HA1] should remain paired",
+      "input": "Click [HA1]here[/HA1]",
+      "style": "balanced",
+      "expectedMock": "Haz clic [HA1]aquí[/HA1]",
+      "v1Output": "Haz clic [HA1]aquí[/HA1]",
+      "v2Output": "Haz clic [HA1]aquí[/HA1]",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "all-caps",
+      "description": "ALL CAPS input should produce ALL CAPS output",
+      "input": "FREE SHIPPING",
+      "style": "balanced",
+      "expectedMock": "ENVÍO GRATIS",
+      "v1Output": "ENVÍO GRATIS",
+      "v2Output": "ENVÍO GRATIS",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "html-entity",
+      "description": "HTML entities like &nbsp; should be preserved",
+      "input": "Terms&nbsp;apply",
+      "style": "balanced",
+      "expectedMock": "Términos&nbsp;aplican",
+      "v1Output": "Se aplican términos&nbsp;y condiciones",
+      "v2Output": "Aplican&nbsp;términos",
+      "v1MatchesExpected": false,
+      "v2MatchesExpected": false,
+      "v1EqualsV2": false
+    },
+    {
+      "name": "style-literal",
+      "description": "Literal style should use formal register",
+      "input": "Your item has been added",
+      "style": "literal",
+      "expectedMock": "Su artículo ha sido añadido",
+      "v1Output": "Su artículo ha sido añadido",
+      "v2Output": "Su artículo ha sido añadido",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "technical-tokens",
+      "description": "Technical tokens like API, OAuth should remain unchanged",
+      "input": "Use the API with OAuth",
+      "style": "balanced",
+      "expectedMock": "Usa la API con OAuth",
+      "v1Output": "Usa la API con OAuth",
+      "v2Output": "Usa la API con OAuth",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "placeholder-only",
+      "description": "Input with only brand + placeholder should return unchanged",
+      "input": "eBay [S1]",
+      "style": "balanced",
+      "expectedMock": "eBay [S1]",
+      "v1Output": "eBay [S1]",
+      "v2Output": "eBay [S1]",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "mixed-placeholders",
+      "description": "Multiple different placeholder types should all be preserved",
+      "input": "Contact [E1] about [N1]",
+      "style": "balanced",
+      "expectedMock": "Contacta [E1] sobre [N1]",
+      "v1Output": "Contacta a [E1] sobre [N1]",
+      "v2Output": "Contacta a [E1] sobre [N1]",
+      "v1MatchesExpected": false,
+      "v2MatchesExpected": false,
+      "v1EqualsV2": true
+    }
+  ],
+  "pathnames": [
+    {
+      "name": "basic-pathname",
+      "description": "Basic pathname should be translated with structure preserved",
+      "input": "/products",
+      "expectedMock": "/productos",
+      "v1Output": "/productos",
+      "v2Output": "/productos",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "numeric-placeholder",
+      "description": "Numeric placeholders [N1] should be preserved in pathnames",
+      "input": "/item/[N1]/details",
+      "expectedMock": "/articulo/[N1]/detalles",
+      "v1Output": "/articulo/[N1]/detalles",
+      "v2Output": "/articulo/[N1]/detalles",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "url-structure",
+      "description": "URL structure with multiple segments should preserve count",
+      "input": "/shop/items",
+      "expectedMock": "/tienda/articulos",
+      "v1Output": "/tienda/articulos",
+      "v2Output": "/tienda/articulos",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "ascii-safe",
+      "description": "Output should contain only ASCII-safe characters",
+      "input": "/cafe/menu",
+      "expectedMock": "/cafe/menu",
+      "v1Output": "/cafe/menu",
+      "v2Output": "/cafe/menu",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "auth-login",
+      "description": "Login pathname should translate to appropriate login term",
+      "input": "/login",
+      "expectedMock": "/iniciar-sesion",
+      "v1Output": "/iniciar-sesion",
+      "v2Output": "/iniciar-sesion",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "auth-signup",
+      "description": "Signup should translate differently from login",
+      "input": "/signup",
+      "expectedMock": "/registrarse",
+      "v1Output": "/registrarse",
+      "v2Output": "/registrarse",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "technical-tokens",
+      "description": "Technical tokens like api, v2 should remain unchanged",
+      "input": "/api/v2/user",
+      "expectedMock": "/api/v2/usuario",
+      "v1Output": "/api/v2/usuario",
+      "v2Output": "/api/v2/usuario",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "multiple-segments",
+      "description": "Multiple segments should all be translated",
+      "input": "/help/article/update-email",
+      "expectedMock": "/ayuda/articulo/actualizar-correo",
+      "v1Output": "/ayuda/articulo/actualizar-correo",
+      "v2Output": "/ayuda/articulo/actualizar-correo",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "trailing-slash",
+      "description": "Trailing slash should be preserved when present",
+      "input": "/products/",
+      "expectedMock": "/productos/",
+      "v1Output": "/productos/",
+      "v2Output": "/productos/",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "placeholder-only",
+      "description": "Pathname with only placeholders should return unchanged",
+      "input": "/[S1]/[N1]",
+      "expectedMock": "/[S1]/[N1]",
+      "v1Output": "/[S1]/[N1]",
+      "v2Output": "/[S1]/[N1]",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    },
+    {
+      "name": "brand-placeholder",
+      "description": "Pathname with brand name and placeholder should return unchanged",
+      "input": "/ebay/[N1]",
+      "expectedMock": "/ebay/[N1]",
+      "v1Output": "/ebay/[N1]",
+      "v2Output": "/ebay/[N1]",
+      "v1MatchesExpected": true,
+      "v2MatchesExpected": true,
+      "v1EqualsV2": true
+    }
+  ],
+  "summary": {
+    "segmentsTotal": 10,
+    "segmentsV1MatchExpected": 8,
+    "segmentsV2MatchExpected": 8,
+    "segmentsV1EqualsV2": 9,
+    "pathnamesTotal": 11,
+    "pathnamesV1MatchExpected": 11,
+    "pathnamesV2MatchExpected": 11,
+    "pathnamesV1EqualsV2": 11
+  }
+}

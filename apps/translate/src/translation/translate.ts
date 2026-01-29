@@ -80,6 +80,7 @@ async function translateSingle(
                         </translate>`,
 					},
 				],
+				temperature: 0,
 				provider: {
 					sort: 'throughput',
 				},
