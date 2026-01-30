@@ -8,6 +8,7 @@
 import type { TokenUsage } from '@pantolingo/db'
 import type { PatternReplacement, Content, PathnameMapping } from '../types.js'
 import { applyPatterns, restorePatterns } from './skip-patterns.js'
+import { toAsciiPathname } from './ascii-pathname.js'
 
 /** Result from translateFn with usage tracking */
 export interface TranslateFnResult {
@@ -149,7 +150,7 @@ export async function translatePathname(
 	}
 
 	// Cache miss - translate the normalized pathname
-	const translatedNormalized = await translateFn(normalized)
+	const translatedNormalized = toAsciiPathname(await translateFn(normalized))
 
 	// Denormalize the translated result
 	const translated = denormalizePathname(translatedNormalized, replacements)
@@ -251,7 +252,7 @@ export async function translatePathnamesBatch(
 
 	for (let i = 0; i < uncachedPathnames.length; i++) {
 		const { original, replacements } = uncachedPathnames[i]
-		const translatedNorm = translateResult.translations[i]
+		const translatedNorm = toAsciiPathname(translateResult.translations[i])
 
 		// Denormalize the translated pathname (restore placeholders)
 		const denormalized = denormalizePathname(translatedNorm, replacements)

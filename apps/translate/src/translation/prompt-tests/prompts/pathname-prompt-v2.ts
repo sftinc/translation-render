@@ -41,5 +41,8 @@ Output: /anmelden
 Input: <translate><sourceLanguageCode>en-us</sourceLanguageCode><targetLanguageCode>de-de</targetLanguageCode><text>/signup</text></translate>
 Output: /registrieren
 
+Input: <translate><sourceLanguageCode>en-us</sourceLanguageCode><targetLanguageCode>es-es</targetLanguageCode><text>/product/design</text></translate>
+Output: /producto/diseno
+
 ## OUTPUT
 Translated pathname only. No explanations. If uncertain or no translatable words, return input unchanged.`
