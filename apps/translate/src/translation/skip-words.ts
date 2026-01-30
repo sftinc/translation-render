@@ -5,6 +5,7 @@
  */
 
 import type { SkipWordReplacement } from '../types.js'
+export type { SkipWordReplacement }
 
 /**
  * Escape special regex characters in a string

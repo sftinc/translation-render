@@ -668,6 +668,9 @@ const CHAR_MAP_RE = new RegExp(
 	'g'
 )
 
+// Placeholder pattern: [E1], [I1], [N1], etc.
+const PLACEHOLDER_RE = /\[[A-Z]+\d+\]/g
+
 /**
  * Convert a pathname to ASCII-safe characters
  *
@@ -675,14 +678,24 @@ const CHAR_MAP_RE = new RegExp(
  * @returns ASCII-safe pathname (e.g., "/producto/diseno")
  */
 export function toAsciiPathname(pathname: string): string {
+	// 0) Extract placeholders to preserve them during sanitization
+	const placeholders: string[] = []
+	let s = pathname.replace(PLACEHOLDER_RE, (match) => {
+		placeholders.push(match)
+		return `\x00${placeholders.length - 1}\x00`
+	})
+
 	// 1) Apply explicit replacements (ligatures, special chars)
-	let s = pathname.replace(CHAR_MAP_RE, (m) => FILTERED_MAP[m])
+	s = s.replace(CHAR_MAP_RE, (m) => FILTERED_MAP[m])
 
 	// 2) Decompose and remove all combining marks
 	s = s.normalize('NFKD').replace(/\p{M}/gu, '')
 
-	// 3) Keep only RFC3986 unreserved chars + /
-	s = s.replace(/[^A-Za-z0-9\-._~\/]/g, '')
+	// 3) Keep only RFC3986 unreserved chars + / + placeholder markers
+	s = s.replace(/[^A-Za-z0-9\-._~\/\x00]/g, '')
+
+	// 4) Restore placeholders
+	s = s.replace(/\x00(\d+)\x00/g, (_, idx) => placeholders[parseInt(idx, 10)])
 
 	// Temp warning log when sanitization occurs
 	if (s !== pathname) {
