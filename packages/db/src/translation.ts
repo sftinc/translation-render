@@ -34,15 +34,21 @@ const TRANSLATION_CACHE_TTL = 60_000 // 60 seconds
 function parseSkipPath(dbArray: string[] | null): (string | RegExp)[] {
 	if (!dbArray || dbArray.length === 0) return []
 
-	return dbArray.map((pattern) => {
-		if (pattern.startsWith('regex:')) {
-			return new RegExp(pattern.slice(6))
-		} else if (pattern.startsWith('includes:')) {
-			return pattern.slice(9)
-		}
-		// Plain string (legacy format)
-		return pattern
-	})
+	return dbArray
+		.map((pattern) => {
+			if (pattern.startsWith('regex:')) {
+				try {
+					return new RegExp(pattern.slice(6))
+				} catch {
+					return null // Skip invalid patterns
+				}
+			} else if (pattern.startsWith('includes:')) {
+				return pattern.slice(9)
+			}
+			// Plain string (legacy format)
+			return pattern
+		})
+		.filter((p): p is string | RegExp => p !== null)
 }
 
 /**
