@@ -447,7 +447,8 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 			const { document } = parseHTMLDocument(fetchResult.html)
 
 			// 5. Extract segments
-			const extractedSegments = extractSegments(document)
+			const skipSelectors = translationConfig.skipSelectors
+			const extractedSegments = extractSegments(document, skipSelectors)
 			const fetchTime = parseStart - fetchStart
 
 			let cachedHits = 0
@@ -707,7 +708,7 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 					})
 
 					// 11. Apply translations to DOM
-					applyTranslations(document, restoredTranslations, extractedSegments)
+					applyTranslations(document, restoredTranslations, extractedSegments, skipSelectors)
 
 					// 12. Collect translations for deferred write
 					if (newSegments.length > 0 && newTranslations.length > 0) {

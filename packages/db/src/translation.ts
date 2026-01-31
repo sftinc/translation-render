@@ -17,6 +17,7 @@ export interface TranslationConfig {
 	targetLang: string // translation.target_lang
 	skipWords: string[]
 	skipPath: (string | RegExp)[]
+	skipSelectors: string[] // CSS selectors for elements to skip during translation
 	translatePath: boolean
 	cacheDisabledUntil: Date | null // website.cache_disabled_until - dev override for caching
 }
@@ -68,6 +69,7 @@ export async function getTranslationConfig(hostname: string): Promise<Translatio
 			target_lang: string
 			skip_words: string[] | null
 			skip_path: string[] | null
+			skip_selectors: string[] | null
 			translate_path: boolean | null
 			cache_disabled_until: Date | null
 			website_hostname: string
@@ -79,6 +81,7 @@ export async function getTranslationConfig(hostname: string): Promise<Translatio
 				t.target_lang,
 				w.skip_words,
 				w.skip_path,
+				w.skip_selectors,
 				w.translate_path,
 				w.cache_disabled_until,
 				w.hostname AS website_hostname,
@@ -104,6 +107,7 @@ export async function getTranslationConfig(hostname: string): Promise<Translatio
 			targetLang: row.target_lang,
 			skipWords: row.skip_words || [],
 			skipPath: parseSkipPath(row.skip_path),
+			skipSelectors: row.skip_selectors || [],
 			translatePath: row.translate_path ?? true,
 			cacheDisabledUntil: row.cache_disabled_until,
 		}

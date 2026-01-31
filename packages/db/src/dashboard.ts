@@ -59,6 +59,7 @@ export interface Website {
 export interface WebsiteWithSettings extends Website {
 	skipWords: string[]
 	skipPath: string[]
+	skipSelectors: string[]
 	translatePath: boolean
 }
 
@@ -151,9 +152,10 @@ export async function getWebsiteById(websiteId: number): Promise<WebsiteWithSett
 		source_lang: string
 		skip_words: string[] | null
 		skip_path: string[] | null
+		skip_selectors: string[] | null
 		translate_path: boolean | null
 	}>(
-		`SELECT id, hostname, source_lang, skip_words, skip_path, translate_path FROM website WHERE id = $1`,
+		`SELECT id, hostname, source_lang, skip_words, skip_path, skip_selectors, translate_path FROM website WHERE id = $1`,
 		[websiteId]
 	)
 
@@ -166,6 +168,7 @@ export async function getWebsiteById(websiteId: number): Promise<WebsiteWithSett
 		sourceLang: row.source_lang,
 		skipWords: row.skip_words || [],
 		skipPath: row.skip_path || [],
+		skipSelectors: row.skip_selectors || [],
 		translatePath: row.translate_path ?? true,
 	}
 }

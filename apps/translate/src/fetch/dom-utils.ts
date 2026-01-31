@@ -3,14 +3,15 @@
  * These functions must remain identical between extractor and applicator
  */
 
-import { SKIP_SELECTORS, SKIP_TAGS } from '../config.js'
+import { SKIP_TAGS } from '../config.js'
 
 /**
  * Check if a node should be skipped during traversal
  * @param node - DOM node to check
+ * @param skipSelectors - CSS selectors for elements to skip (from database config)
  * @returns true if node or any ancestor should be skipped
  */
-export function shouldSkipNode(node: Node): boolean {
+export function shouldSkipNode(node: Node, skipSelectors: string[]): boolean {
 	let current: Node | null = node
 
 	while (current) {
@@ -18,13 +19,13 @@ export function shouldSkipNode(node: Node): boolean {
 			// Node.ELEMENT_NODE
 			const elem = current as Element
 
-			for (const selector of SKIP_SELECTORS) {
+			for (const selector of skipSelectors) {
 				try {
 					if (elem.matches(selector)) {
 						return true
 					}
 				} catch (e) {
-					// Invalid selector, continue
+					// Invalid selector, continue gracefully
 				}
 			}
 

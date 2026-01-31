@@ -6,7 +6,6 @@
 import type { HtmlTagType } from './types.js'
 
 // DOM traversal skip rules
-export const SKIP_SELECTORS = ['.translate-none', '.notranslate', '[notranslate]']
 export const SKIP_TAGS = new Set(['script', 'style', 'noscript', 'textarea', 'code'])
 
 // HTML placeholder configuration for inline element grouping

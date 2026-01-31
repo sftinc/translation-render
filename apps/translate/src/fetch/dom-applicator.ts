@@ -54,15 +54,17 @@ function applyToGroupedBlocks(
  * @param segments - Original extracted segments with whitespace metadata
  * @param indexRef - Object containing mutable index (passed by reference)
  * @param groupedElements - Set of elements that were grouped (to skip)
+ * @param skipSelectors - CSS selectors for elements to skip
  */
 function applyToTextNodes(
 	node: Node,
 	translations: string[],
 	segments: Content[],
 	indexRef: { index: number },
-	groupedElements: Set<Element>
+	groupedElements: Set<Element>,
+	skipSelectors: string[]
 ): void {
-	if (shouldSkipNode(node)) {
+	if (shouldSkipNode(node, skipSelectors)) {
 		return
 	}
 
@@ -92,7 +94,7 @@ function applyToTextNodes(
 	// Recurse through children in order
 	const children = node.childNodes
 	for (let i = 0; i < children.length; i++) {
-		applyToTextNodes(children[i], translations, segments, indexRef, groupedElements)
+		applyToTextNodes(children[i], translations, segments, indexRef, groupedElements, skipSelectors)
 	}
 }
 
@@ -103,19 +105,21 @@ function applyToTextNodes(
  * @param translations - Translation strings array
  * @param segments - Original extracted segments with whitespace metadata
  * @param indexRef - Object containing mutable index (passed by reference)
+ * @param skipSelectors - CSS selectors for elements to skip
  */
 function applyToAttributes(
 	document: Document,
 	translations: string[],
 	segments: Content[],
-	indexRef: { index: number }
+	indexRef: { index: number },
+	skipSelectors: string[]
 ): void {
 	const allElements = document.querySelectorAll('*')
 
 	for (let i = 0; i < allElements.length; i++) {
 		const elem = allElements[i] as Element
 
-		if (shouldSkipNode(elem)) {
+		if (shouldSkipNode(elem, skipSelectors)) {
 			continue
 		}
 
@@ -144,16 +148,18 @@ function applyToAttributes(
  * @param translations - Translation strings array
  * @param segments - Original extracted segments with whitespace metadata
  * @param indexRef - Object containing mutable index (passed by reference)
+ * @param skipSelectors - CSS selectors for elements to skip
  */
 function applyHeadTitle(
 	document: Document,
 	translations: string[],
 	segments: Content[],
-	indexRef: { index: number }
+	indexRef: { index: number },
+	skipSelectors: string[]
 ): void {
 	const titleElement = document.querySelector('title')
 	// Skip if element should be skipped
-	if (!titleElement || shouldSkipNode(titleElement)) {
+	if (!titleElement || shouldSkipNode(titleElement, skipSelectors)) {
 		return
 	}
 	if (titleElement.textContent && titleElement.textContent.trim().length > 0) {
@@ -177,16 +183,18 @@ function applyHeadTitle(
  * @param translations - Translation strings array
  * @param segments - Original extracted segments with whitespace metadata
  * @param indexRef - Object containing mutable index (passed by reference)
+ * @param skipSelectors - CSS selectors for elements to skip
  */
 function applyHeadDescription(
 	document: Document,
 	translations: string[],
 	segments: Content[],
-	indexRef: { index: number }
+	indexRef: { index: number },
+	skipSelectors: string[]
 ): void {
 	const descElement = document.querySelector('meta[name="description"]')
 	// Skip if element should be skipped
-	if (!descElement || shouldSkipNode(descElement)) {
+	if (!descElement || shouldSkipNode(descElement, skipSelectors)) {
 		return
 	}
 	const content = descElement.getAttribute('content')
@@ -211,9 +219,10 @@ function applyHeadDescription(
  * @param document - linkedom Document object
  * @param translations - Array of translated strings (parallel to extracted segments)
  * @param segments - Original extracted segments with whitespace metadata
+ * @param skipSelectors - CSS selectors for elements to skip
  * @returns Number of translations applied
  */
-export function applyTranslations(document: Document, translations: string[], segments: Content[]): number {
+export function applyTranslations(document: Document, translations: string[], segments: Content[], skipSelectors: string[]): number {
 	// Use object to maintain index reference across function calls
 	const indexRef = { index: 0 }
 
@@ -221,19 +230,19 @@ export function applyTranslations(document: Document, translations: string[], se
 	const groupedElements = new Set<Element>()
 
 	// Apply to head metadata first (must be identical order as extraction)
-	applyHeadTitle(document, translations, segments, indexRef)
-	applyHeadDescription(document, translations, segments, indexRef)
+	applyHeadTitle(document, translations, segments, indexRef, skipSelectors)
+	applyHeadDescription(document, translations, segments, indexRef, skipSelectors)
 
 	// Apply to grouped HTML blocks (must be before text nodes, matching extraction order)
 	applyToGroupedBlocks(translations, segments, indexRef, groupedElements)
 
 	// Apply to remaining text nodes (skipping grouped elements)
 	if (document.body) {
-		applyToTextNodes(document.body, translations, segments, indexRef, groupedElements)
+		applyToTextNodes(document.body, translations, segments, indexRef, groupedElements, skipSelectors)
 	}
 
 	// Apply to attributes (must be identical order as extraction)
-	applyToAttributes(document, translations, segments, indexRef)
+	applyToAttributes(document, translations, segments, indexRef, skipSelectors)
 
 	return indexRef.index
 }

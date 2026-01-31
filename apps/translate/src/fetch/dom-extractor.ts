@@ -14,9 +14,10 @@ import { shouldSkipNode, isInsideGroupedElement } from './dom-utils.js'
  * @param node - Current node in traversal
  * @param segments - Accumulator array for segments
  * @param groupedElements - Set to track which elements were grouped
+ * @param skipSelectors - CSS selectors for elements to skip
  */
-function extractGroupedBlocks(node: Node, segments: Content[], groupedElements: Set<Element>): void {
-	if (shouldSkipNode(node)) {
+function extractGroupedBlocks(node: Node, segments: Content[], groupedElements: Set<Element>, skipSelectors: string[]): void {
+	if (shouldSkipNode(node, skipSelectors)) {
 		return
 	}
 
@@ -61,7 +62,7 @@ function extractGroupedBlocks(node: Node, segments: Content[], groupedElements: 
 	// Recurse into children
 	const children = node.childNodes
 	for (let i = 0; i < children.length; i++) {
-		extractGroupedBlocks(children[i], segments, groupedElements)
+		extractGroupedBlocks(children[i], segments, groupedElements, skipSelectors)
 	}
 }
 
@@ -71,10 +72,11 @@ function extractGroupedBlocks(node: Node, segments: Content[], groupedElements: 
  * @param node - Current node in traversal
  * @param segments - Accumulator array for segments
  * @param groupedElements - Set of elements that were grouped (to skip)
+ * @param skipSelectors - CSS selectors for elements to skip
  */
-function extractTextNodes(node: Node, segments: Content[], groupedElements: Set<Element>): void {
+function extractTextNodes(node: Node, segments: Content[], groupedElements: Set<Element>, skipSelectors: string[]): void {
 	// Skip if node or ancestor should be skipped
-	if (shouldSkipNode(node)) {
+	if (shouldSkipNode(node, skipSelectors)) {
 		return
 	}
 
@@ -104,7 +106,7 @@ function extractTextNodes(node: Node, segments: Content[], groupedElements: Set<
 	// Recursively process child nodes in order (depth-first)
 	const children = node.childNodes
 	for (let i = 0; i < children.length; i++) {
-		extractTextNodes(children[i], segments, groupedElements)
+		extractTextNodes(children[i], segments, groupedElements, skipSelectors)
 	}
 }
 
@@ -113,15 +115,16 @@ function extractTextNodes(node: Node, segments: Content[], groupedElements: Set<
  * Uses querySelectorAll which returns elements in document order
  * @param document - linkedom Document object
  * @param segments - Accumulator array for segments
+ * @param skipSelectors - CSS selectors for elements to skip
  */
-function extractAttributes(document: Document, segments: Content[]): void {
+function extractAttributes(document: Document, segments: Content[], skipSelectors: string[]): void {
 	const allElements = document.querySelectorAll('*')
 
 	for (let i = 0; i < allElements.length; i++) {
 		const elem = allElements[i] as Element
 
 		// Skip if element should be skipped
-		if (shouldSkipNode(elem)) {
+		if (shouldSkipNode(elem, skipSelectors)) {
 			continue
 		}
 
@@ -148,11 +151,12 @@ function extractAttributes(document: Document, segments: Content[]): void {
  * Extract title text from <title> element
  * @param document - linkedom Document object
  * @param segments - Accumulator array for segments
+ * @param skipSelectors - CSS selectors for elements to skip
  */
-function extractHeadTitle(document: Document, segments: Content[]): void {
+function extractHeadTitle(document: Document, segments: Content[], skipSelectors: string[]): void {
 	const titleElement = document.querySelector('title')
 	// Skip if element should be skipped
-	if (!titleElement || shouldSkipNode(titleElement)) {
+	if (!titleElement || shouldSkipNode(titleElement, skipSelectors)) {
 		return
 	}
 	if (titleElement.textContent && titleElement.textContent.trim().length > 0) {
@@ -173,11 +177,12 @@ function extractHeadTitle(document: Document, segments: Content[]): void {
  * Extract description from <meta name="description"> element
  * @param document - linkedom Document object
  * @param segments - Accumulator array for segments
+ * @param skipSelectors - CSS selectors for elements to skip
  */
-function extractHeadDescription(document: Document, segments: Content[]): void {
+function extractHeadDescription(document: Document, segments: Content[], skipSelectors: string[]): void {
 	const descElement = document.querySelector('meta[name="description"]')
 	// Skip if element should be skipped
-	if (!descElement || shouldSkipNode(descElement)) {
+	if (!descElement || shouldSkipNode(descElement, skipSelectors)) {
 		return
 	}
 	const content = descElement.getAttribute('content')
@@ -200,9 +205,10 @@ function extractHeadDescription(document: Document, segments: Content[]): void {
  * Uses recursive traversal to replicate TreeWalker behavior
  * Supports grouped HTML extraction for block elements with inline content
  * @param document - linkedom Document object
+ * @param skipSelectors - CSS selectors for elements to skip
  * @returns Array of Segment objects in stable traversal order
  */
-export function extractSegments(document: Document): Content[] {
+export function extractSegments(document: Document, skipSelectors: string[]): Content[] {
 	const segments: Content[] = []
 
 	// Guard against invalid HTML (no documentElement means parsing failed)
@@ -214,23 +220,23 @@ export function extractSegments(document: Document): Content[] {
 	const groupedElements = new Set<Element>()
 
 	// Extract head metadata first (title and description)
-	extractHeadTitle(document, segments)
-	extractHeadDescription(document, segments)
+	extractHeadTitle(document, segments, skipSelectors)
+	extractHeadDescription(document, segments, skipSelectors)
 
 	// Extract grouped blocks first (p, h1-h6, li, etc. with inline content)
 	// This produces 'html' kind segments with placeholders
 	if (document.body) {
-		extractGroupedBlocks(document.body, segments, groupedElements)
+		extractGroupedBlocks(document.body, segments, groupedElements, skipSelectors)
 	}
 
 	// Extract remaining text nodes (skipping content inside grouped elements)
 	// This handles non-groupable content that falls back to individual text nodes
 	if (document.body) {
-		extractTextNodes(document.body, segments, groupedElements)
+		extractTextNodes(document.body, segments, groupedElements, skipSelectors)
 	}
 
 	// Extract attributes from all elements
-	extractAttributes(document, segments)
+	extractAttributes(document, segments, skipSelectors)
 
 	return segments
 }
