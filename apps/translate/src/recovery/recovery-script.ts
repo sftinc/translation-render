@@ -46,10 +46,11 @@ const BLOCK_ELEMENTS = new Set([
 
 /**
  * Check if an element or its ancestors should be skipped
+ * Also skips elements with data-pantolingo-pending (deferred translation in progress)
  */
 function shouldSkip(element: Element | null): boolean {
 	while (element) {
-		if (element.hasAttribute('data-pantolingo-skip')) {
+		if (element.hasAttribute('data-pantolingo-skip') || element.hasAttribute('data-pantolingo-pending')) {
 			return true
 		}
 		element = element.parentElement

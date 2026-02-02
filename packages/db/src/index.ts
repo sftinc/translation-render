@@ -10,6 +10,7 @@ export {
 	batchUpsertTranslations,
 	batchGetTranslationIds,
 	batchGetWebsiteSegmentIds,
+	batchGetTranslationsByHash,
 	type TranslationItem,
 } from './segments.js'
 export { linkPathSegments } from './junctions.js'

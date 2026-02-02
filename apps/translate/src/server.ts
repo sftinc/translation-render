@@ -12,15 +12,13 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env') })
 
 import express from 'express'
 import { handleRequest } from './pipeline.js'
-import { testConnection, closePool } from '@pantolingo/db'
+import { testConnection, closePool, getTranslationConfig, batchGetTranslationsByHash } from '@pantolingo/db'
 import { renderMessagePage } from './utils/message-page.js'
 import { getRecoveryScript } from './recovery/index.js'
+import { getDeferredScript, handleTranslateRequest } from './deferred/index.js'
 
 const app = express()
 const PORT = process.env.PORT || 8787
-
-// Parse raw body for POST/PUT requests
-app.use(express.raw({ type: '*/*', limit: '10mb' }))
 
 // Health check endpoint
 app.get('/healthz', (_req, res) => {
@@ -34,6 +32,30 @@ app.get('/__pantolingo/recovery.js', (_req, res) => {
 	res.set('Cache-Control', 'public, max-age=30')
 	res.send(getRecoveryScript())
 })
+
+// Deferred script endpoint - serves the client-side deferred translation script
+app.get('/__pantolingo/deferred.js', (_req, res) => {
+	res.set('Content-Type', 'application/javascript')
+	res.set('Cache-Control', 'public, max-age=30')
+	res.send(getDeferredScript())
+})
+
+// Translation lookup endpoint - returns completed translations for polling
+// IMPORTANT: Must be defined BEFORE the raw body parser middleware
+app.post('/__pantolingo/translate', express.json(), async (req, res) => {
+	try {
+		const host = req.get('x-forwarded-host') || req.get('host') || ''
+		const result = await handleTranslateRequest(host, req.body)
+		res.json(result)
+	} catch (error) {
+		console.error('[Translate Endpoint] Error:', error)
+		res.status(500).json({ error: 'Internal server error' })
+	}
+})
+
+// Parse raw body for POST/PUT requests (for proxied requests to origin)
+// This must come AFTER the /__pantolingo/translate endpoint
+app.use(express.raw({ type: '*/*', limit: '10mb' }))
 
 // Maintenance mode middleware
 app.use((req, res, next) => {

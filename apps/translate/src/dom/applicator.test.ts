@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import { parseHTML } from 'linkedom'
 import { extractSegments } from './extractor.js'
-import { applyTranslations } from './applicator.js'
+import { applyTranslations, type ApplyTranslationsResult } from './applicator.js'
 
 // Helper to create a document with the given HTML
 function createDocument(bodyHtml: string, headHtml = ''): Document {
@@ -204,6 +204,144 @@ describe('applyTranslations with skipSelectors', () => {
 
 			const count = applyTranslations(doc, translations, segments, skipSelectors)
 			expect(count).toBe(2)
+		})
+	})
+})
+
+describe('applyTranslations deferred mode', () => {
+	describe('pending segment marking', () => {
+		it('returns ApplyTranslationsResult when hashes are provided', () => {
+			const doc = createDocument('<p>Hello</p>')
+			const skipSelectors: string[] = []
+			const segments = extractSegments(doc, skipSelectors)
+			const translations: (string | null)[] = ['Hola']
+			const hashes = ['hash1']
+
+			const result = applyTranslations(doc, translations, segments, skipSelectors, hashes)
+
+			expect(typeof result).toBe('object')
+			expect((result as ApplyTranslationsResult).applied).toBe(1)
+			expect((result as ApplyTranslationsResult).pending).toHaveLength(0)
+		})
+
+		it('marks null translations as pending for html segments', () => {
+			const doc = createDocument('<p>Hello <strong>world</strong></p>')
+			const skipSelectors: string[] = []
+			const segments = extractSegments(doc, skipSelectors)
+			const translations: (string | null)[] = [null]
+			const hashes = ['hash1']
+
+			const result = applyTranslations(doc, translations, segments, skipSelectors, hashes) as ApplyTranslationsResult
+
+			expect(result.applied).toBe(0)
+			expect(result.pending).toHaveLength(1)
+			expect(result.pending[0].hash).toBe('hash1')
+			expect(result.pending[0].kind).toBe('html')
+			expect(result.pending[0].showSkeleton).toBe(true)
+			// original should be placeholdered text
+			expect(result.pending[0].original).toBe('Hello [HB1]world[/HB1]')
+			// originalHtml should be raw innerHTML
+			expect(result.pending[0].originalHtml).toBe('Hello <strong>world</strong>')
+
+			// Check DOM was marked
+			const p = doc.querySelector('p')
+			expect(p?.classList.contains('pantolingo-skeleton')).toBe(true)
+			expect(p?.getAttribute('data-pantolingo-pending')).toBe('hash1')
+		})
+
+		it('marks null translations as pending for text segments with comment marker', () => {
+			const doc = createDocument('<div><span>Hello</span></div>')
+			const skipSelectors: string[] = []
+			const segments = extractSegments(doc, skipSelectors)
+			const translations: (string | null)[] = [null]
+			const hashes = ['hash1']
+
+			const result = applyTranslations(doc, translations, segments, skipSelectors, hashes) as ApplyTranslationsResult
+
+			expect(result.applied).toBe(0)
+			expect(result.pending).toHaveLength(1)
+			expect(result.pending[0].kind).toBe('text')
+
+			// Check for comment marker - comment is inserted before the text node inside span
+			const span = doc.querySelector('span')
+			// The first child should now be the comment, followed by the text node
+			const firstChild = span?.firstChild
+			expect(firstChild?.nodeType).toBe(8) // Comment node
+			expect((firstChild as Comment).data).toBe('pantolingo:hash1')
+		})
+
+		it('marks null translations as pending for attr segments', () => {
+			const doc = createDocument('<img alt="Description" />')
+			const skipSelectors: string[] = []
+			const segments = extractSegments(doc, skipSelectors)
+			const translations: (string | null)[] = [null]
+			const hashes = ['hash1']
+
+			const result = applyTranslations(doc, translations, segments, skipSelectors, hashes) as ApplyTranslationsResult
+
+			expect(result.applied).toBe(0)
+			expect(result.pending).toHaveLength(1)
+			expect(result.pending[0].kind).toBe('attr')
+			expect(result.pending[0].attr).toBe('alt')
+			expect(result.pending[0].showSkeleton).toBe(false)
+
+			// Check DOM was marked
+			const img = doc.querySelector('img')
+			expect(img?.getAttribute('data-pantolingo-pending')).toBe('hash1')
+			expect(img?.getAttribute('data-pantolingo-attr')).toBe('alt')
+		})
+
+		it('handles mixed cached and pending translations', () => {
+			const doc = createDocument('<p>First</p><p>Second</p><p>Third</p>')
+			const skipSelectors: string[] = []
+			const segments = extractSegments(doc, skipSelectors)
+			// First cached, second pending, third cached
+			const translations: (string | null)[] = ['Primero', null, 'Tercero']
+			const hashes = ['hash1', 'hash2', 'hash3']
+
+			const result = applyTranslations(doc, translations, segments, skipSelectors, hashes) as ApplyTranslationsResult
+
+			expect(result.applied).toBe(2)
+			expect(result.pending).toHaveLength(1)
+			expect(result.pending[0].hash).toBe('hash2')
+
+			const paragraphs = doc.querySelectorAll('p')
+			expect(paragraphs[0].textContent).toBe('Primero')
+			expect(paragraphs[1].getAttribute('data-pantolingo-pending')).toBe('hash2')
+			expect(paragraphs[2].textContent).toBe('Tercero')
+		})
+	})
+
+	describe('sole child detection for skeleton', () => {
+		it('adds skeleton to parent when text node is sole child', () => {
+			const doc = createDocument('<p>Hello</p>')
+			const skipSelectors: string[] = []
+			const segments = extractSegments(doc, skipSelectors)
+			const translations: (string | null)[] = [null]
+			const hashes = ['hash1']
+
+			const result = applyTranslations(doc, translations, segments, skipSelectors, hashes) as ApplyTranslationsResult
+
+			expect(result.pending[0].showSkeleton).toBe(true)
+
+			const p = doc.querySelector('p')
+			expect(p?.classList.contains('pantolingo-skeleton')).toBe(true)
+		})
+
+		it('does not add skeleton when text node has siblings', () => {
+			const doc = createDocument('<div>Hello <span>World</span></div>')
+			const skipSelectors: string[] = []
+			const segments = extractSegments(doc, skipSelectors)
+			// First segment is "Hello", second is "World"
+			const translations: (string | null)[] = [null, 'Mundo']
+			const hashes = ['hash1', 'hash2']
+
+			const result = applyTranslations(doc, translations, segments, skipSelectors, hashes) as ApplyTranslationsResult
+
+			// "Hello" text has a sibling (span), so no skeleton on parent div
+			expect(result.pending[0].showSkeleton).toBe(false)
+			const div = doc.querySelector('div')
+			expect(div?.classList.contains('pantolingo-skeleton')).toBe(false)
 		})
 	})
 })

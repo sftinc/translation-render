@@ -35,6 +35,8 @@ import { proxyStaticAsset, proxyNonHtmlContent, isHtmlContent, isRedirect, type 
 import { renderMessagePage } from './utils/message-page.js'
 import { getCacheControl } from './utils/cache-control.js'
 import { detectSpaFramework, buildTranslationDictionary, injectRecoveryAssets, markSkippedElements } from './recovery/index.js'
+import { isInFlight, setInFlight, buildInFlightKey, startBackgroundTranslation, injectDeferredAssets } from './deferred/index.js'
+import type { PendingSegment, ApplyTranslationsResult } from './dom/applicator.js'
 import {
 	getTranslationConfig,
 	getWebsitePathId,
@@ -420,12 +422,261 @@ export async function handleRequest(req: Request, res: Response): Promise<void> 
 					deferredWrites.cachedSegmentHashes = Array.from(cachedTranslations.keys()).map((text) => hashText(text))
 				}
 
+				// Compute hashes for all segments (needed for both deferred and sync modes)
+				const segmentHashes = normalizedSegments.map((s) => hashText(s.value))
+
+				// Feature toggle for deferred translation (always on for now, future: per-site setting)
+				const useDeferredTranslation = true
+
 				// 8. Extract link pathnames early (before translation) for parallel processing
 				// Skip path translation for error responses (4xx, 5xx)
 				const isErrorResponse = fetchResult.statusCode >= 400
 				const linkPathnames = translationConfig.translatePath && !isErrorResponse
 					? extractLinkPathnames(document, originHostname)
 					: new Set<string>()
+
+				// ===== DEFERRED TRANSLATION PATH =====
+				// When enabled and there are cache misses, serve page immediately with skeletons
+				// and translate in the background
+				if (useDeferredTranslation && newSegments.length > 0) {
+					// Deduplicate against in-flight store to avoid duplicate LLM calls
+					const segmentsToTranslate: Content[] = []
+					const hashesToTranslate: string[] = []
+
+					for (let i = 0; i < newSegments.length; i++) {
+						const originalIndex = newIndices[i]
+						const hash = segmentHashes[originalIndex]
+						const key = buildInFlightKey(translationConfig.websiteId, targetLang, hash)
+
+						if (!isInFlight(key)) {
+							setInFlight(key)
+							segmentsToTranslate.push(newSegments[i])
+							hashesToTranslate.push(hash)
+						}
+					}
+
+					// Fire-and-forget background translation
+					if (segmentsToTranslate.length > 0) {
+						startBackgroundTranslation({
+							websiteId: translationConfig.websiteId,
+							lang: targetLang,
+							sourceLang,
+							segments: segmentsToTranslate,
+							hashes: hashesToTranslate,
+							skipWords: translationConfig.skipWords,
+							apiKey: OPENROUTER_API_KEY(),
+							projectId: GOOGLE_PROJECT_ID(),
+							context: { host, pathname: originalPathname },
+						}).catch((err) => console.error('[Background Translation] Error:', err))
+					}
+
+					// Build translations array: cached values + null for pending
+					const translations: (string | null)[] = normalizedSegments.map((_, i) => {
+						const cachedTranslation = cached.get(i)
+						return cachedTranslation !== undefined ? cachedTranslation : null
+					})
+
+					// Restore patterns for cached translations before applying to DOM
+					const restoredTranslations: (string | null)[] = translations.map((translation, i) => {
+						if (translation === null) return null
+						return restorePatterns(translation, patternData[i]?.replacements ?? [], patternData[i]?.isUpperCase)
+					})
+
+					// Apply translations with deferred mode (marks pending as skeletons)
+					const applyResult = applyTranslations(
+						document,
+						restoredTranslations,
+						extractedSegments,
+						skipSelectors,
+						segmentHashes
+					) as ApplyTranslationsResult
+
+					// Inject deferred assets if there are pending segments
+					if (applyResult.pending.length > 0) {
+						injectDeferredAssets(document, applyResult.pending)
+					}
+
+					// Log deferred mode info
+					translateTime = 0 // No wait time in deferred mode
+					batchCount = 0 // No batches sent synchronously
+					const pendingCount = applyResult.pending.length
+					const appliedCount = applyResult.applied
+
+					// Still need to handle pathnames and link rewriting
+					// (pathnames still use synchronous translation for now)
+					let translatedPathname = originalPathname
+					let pathnameMap: Map<string, string> | undefined
+
+					// Skip pathname handling for error responses
+					if (translationConfig.translatePath && !isErrorResponse) {
+						// Pathname translation remains synchronous (typically fast, mostly cached)
+						try {
+							const allPathnames = new Set(linkPathnames)
+							if (!shouldSkipPath(originalPathname, translationConfig.skipPath)) {
+								allPathnames.add(originalPathname)
+							}
+							totalPaths = allPathnames.size
+
+							if (allPathnames.size > 0) {
+								// Normalize paths before DB lookup
+								const normalizedToOriginal = new Map<string, string>()
+								for (const path of allPathnames) {
+									const { normalized } = normalizePathname(path)
+									normalizedToOriginal.set(normalized, path)
+								}
+								const normalizedPaths = Array.from(normalizedToOriginal.keys())
+								const existingPathnames = await batchLookupPathnames(
+									translationConfig.websiteId,
+									translationConfig.targetLang,
+									normalizedPaths
+								)
+
+								// Collect cached paths for deferred last_used_on update
+								if (existingPathnames.size > 0) {
+									deferredWrites.cachedPaths = Array.from(existingPathnames.keys())
+								}
+
+								// Build pathname mapping for link rewriting
+								const pathnameMapping = existingPathnames.size > 0
+									? {
+										source: Object.fromEntries(existingPathnames),
+										translated: Object.fromEntries(
+											Array.from(existingPathnames.entries()).map(([k, v]) => [v, k])
+										),
+									  }
+									: null
+
+								// Translate pathnames (synchronous for now)
+								const batchResult = await translatePathnamesBatch(
+									allPathnames,
+									pathnameMapping,
+									async (segments: Content[]) => {
+										const result = await translateSegments(
+											segments,
+											sourceLang,
+											targetLang,
+											GOOGLE_PROJECT_ID(),
+											OPENROUTER_API_KEY(),
+											translationConfig.skipWords,
+											'balanced',
+											{ host, pathname: originalPathname }
+										)
+										return {
+											translations: result.translations,
+											usage: result.usage,
+											apiCallCount: result.apiCallCount,
+										}
+									},
+									translationConfig.skipPath
+								)
+
+								translatedPathname = batchResult.pathnameMap.get(originalPathname) || originalPathname
+								pathnameMap = batchResult.pathnameMap
+								newPaths = batchResult.newTranslations.length
+
+								// Record pathname LLM usage
+								if (batchResult.apiCallCount > 0) {
+									deferredWrites.llmUsage.push({
+										websiteId: translationConfig.websiteId,
+										feature: 'path_translation',
+										promptTokens: batchResult.usage.promptTokens,
+										completionTokens: batchResult.usage.completionTokens,
+										cost: batchResult.usage.cost,
+										apiCalls: batchResult.apiCallCount,
+									})
+								}
+
+								// Collect pathname translations for deferred write
+								if (batchResult.newSegments.length > 0) {
+									deferredWrites.pathnames.push(
+										...batchResult.newSegments.map((seg, i) => ({
+											original: seg.value,
+											translated: batchResult.newTranslations[i],
+										}))
+									)
+								}
+
+								// Update current path in deferred writes if translated
+								if (translatedPathname !== originalPathname) {
+									const { normalized: normalizedTranslated } = normalizePathname(translatedPathname)
+									deferredWrites.pathnames[0] = {
+										original: deferredWrites.currentPath,
+										translated: normalizedTranslated,
+									}
+								}
+							}
+						} catch (pathnameError) {
+							console.error('[Deferred Pathname Translation] Failed:', pathnameError)
+						}
+					}
+
+					// Rewrite links
+					rewriteLinks(
+						document,
+						originHostname,
+						host,
+						originalPathname,
+						translatedPathname,
+						translationConfig.translatePath || false,
+						pathnameMap
+					)
+
+					// Add lang metadata
+					try {
+						addLangMetadata(document, targetLang, sourceLang, host, originHostname, originalPathname, url)
+					} catch (langError) {
+						console.error('[Lang Metadata] Failed:', langError)
+					}
+
+					// Inject SPA recovery assets if needed (with cached translations only)
+					if (detectSpaFramework(document) && appliedCount > 0) {
+						const dictionary = buildTranslationDictionary(
+							document,
+							extractedSegments,
+							originalValues,
+							skipSelectors,
+							targetLang
+						)
+
+						const hasEntries =
+							Object.keys(dictionary.text).length > 0 ||
+							Object.keys(dictionary.html).length > 0 ||
+							Object.keys(dictionary.attrs).length > 0
+
+						if (hasEntries) {
+							markSkippedElements(document, skipSelectors)
+							injectRecoveryAssets(document, dictionary)
+						}
+					}
+
+					// Serialize and send response immediately
+					html = document.toString()
+
+					const totalTime = Date.now() - fetchStart
+					const urlObj = new URL(fetchUrl)
+					console.log(
+						`▶ [${targetLang}] ${urlObj.host}${urlObj.pathname} (${totalTime}ms) [DEFERRED] | fetch: ${fetchTime}ms | cached: ${appliedCount} | pending: ${pendingCount} | paths: ${totalPaths} (+${newPaths})`
+					)
+
+					// Execute deferred DB writes after response is sent
+					res.on('finish', () => {
+						executeDeferredWrites(deferredWrites)
+					})
+
+					// Send response
+					const htmlHeaders = prepareResponseHeaders(fetchResult.headers)
+					htmlHeaders['Content-Type'] = 'text/html; charset=utf-8'
+					htmlHeaders['Cache-Control'] = getCacheControl({
+						originHeaders: fetchResult.headers,
+						cacheDisabledUntil: translationConfig.cacheDisabledUntil,
+						applyMinimumCache: false,
+					})
+					res.status(fetchResult.statusCode).set(htmlHeaders).send(html)
+					return
+				}
+
+				// ===== SYNCHRONOUS TRANSLATION PATH (existing behavior) =====
+				// Used when deferred mode is disabled OR when all segments are cached
 
 				// 9. Translate segments and pathnames in parallel for maximum performance
 				const translateStart = Date.now()

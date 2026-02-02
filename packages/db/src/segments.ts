@@ -217,3 +217,48 @@ export async function batchGetWebsiteSegmentIds(
 		return new Map() // Fail open
 	}
 }
+
+/**
+ * Batch lookup translations by text hash (for deferred polling)
+ * Used by the /__pantolingo/translate endpoint to fetch completed translations
+ *
+ * @param websiteId - Website ID
+ * @param lang - Target language code
+ * @param hashes - Array of text hashes to look up
+ * @returns Map of text_hash -> translated_text (only for completed translations)
+ *
+ * SQL: 1 query joining website_segment -> translation_segment
+ */
+export async function batchGetTranslationsByHash(
+	websiteId: number,
+	lang: string,
+	hashes: string[]
+): Promise<Map<string, string>> {
+	if (hashes.length === 0) {
+		return new Map()
+	}
+
+	try {
+		const result = await pool.query<{
+			text_hash: string
+			translated_text: string
+		}>(
+			`SELECT ws.text_hash, ts.translated_text
+			FROM website_segment ws
+			JOIN translation_segment ts ON ts.website_segment_id = ws.id
+			WHERE ws.website_id = $1
+			  AND ts.lang = $2
+			  AND ws.text_hash = ANY($3::text[])`,
+			[websiteId, lang, hashes]
+		)
+
+		const translationMap = new Map<string, string>()
+		for (const row of result.rows) {
+			translationMap.set(row.text_hash, row.translated_text)
+		}
+		return translationMap
+	} catch (error) {
+		console.error('DB translation hash lookup failed:', error)
+		return new Map() // Fail open - treat as cache miss
+	}
+}

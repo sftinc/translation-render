@@ -19,7 +19,7 @@ var d=window.__PANTOLINGO__;
 if(!d)return;
 var ATTRS=['alt','title','placeholder','aria-label'];
 var BLOCKS=['P','H1','H2','H3','H4','H5','H6','LI','TD','TH','DD','DT','FIGCAPTION','CAPTION','LABEL','LEGEND','SUMMARY'];
-function skip(e){while(e){if(e.hasAttribute&&e.hasAttribute('data-pantolingo-skip'))return true;e=e.parentElement}return false}
+function skip(e){while(e){if(e.hasAttribute&&(e.hasAttribute('data-pantolingo-skip')||e.hasAttribute('data-pantolingo-pending')))return true;e=e.parentElement}return false}
 function ws(s){return[s.match(/^(\\s*)/)[1]||'',s.match(/(\\s*)$/)[1]||'']}
 function html(p){
 var h=d.html;if(!Object.keys(h).length)return;
