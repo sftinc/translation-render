@@ -16,8 +16,7 @@ import { shouldSkipNode, isInsideGroupedElement } from './utils.js'
 export interface PendingSegment {
 	hash: string
 	kind: 'html' | 'text' | 'attr'
-	original: string // Placeholdered text (for pattern restoration)
-	originalHtml?: string // Raw innerHTML for HTML segments (for HTML tag restoration)
+	content: string // Raw content (innerHTML for html, text for text, value for attr)
 	attr?: string
 	showSkeleton: boolean
 }
@@ -96,10 +95,7 @@ function applyToGroupedBlocks(
 				pending.push({
 					hash,
 					kind: 'html',
-					// Placeholdered text for pattern restoration
-					original: segment.value,
-					// Raw innerHTML for HTML tag restoration
-					originalHtml: segment.htmlMeta.originalInnerHTML,
+					content: segment.htmlMeta.originalInnerHTML,
 					showSkeleton: true,
 				})
 
@@ -184,7 +180,7 @@ function applyToTextNodes(
 					pending.push({
 						hash,
 						kind: 'text',
-						original: segment.value,
+						content: (node as Text).data.trim(),
 						showSkeleton: isSole,
 					})
 				} else if (translation !== null) {
@@ -253,7 +249,7 @@ function applyToAttributes(
 						pending.push({
 							hash,
 							kind: 'attr',
-							original: segment.value,
+							content: value,
 							attr,
 							showSkeleton: false,
 						})
@@ -309,7 +305,7 @@ function applyHeadTitle(
 				pending.push({
 					hash,
 					kind: 'text',
-					original: segment.value,
+					content: titleElement.textContent!.trim(),
 					showSkeleton: false,
 				})
 			} else if (translation !== null) {
@@ -363,7 +359,7 @@ function applyHeadDescription(
 				pending.push({
 					hash,
 					kind: 'attr',
-					original: segment.value,
+					content,
 					attr: 'content',
 					showSkeleton: false,
 				})

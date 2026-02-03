@@ -238,10 +238,8 @@ describe('applyTranslations deferred mode', () => {
 			expect(result.pending[0].hash).toBe('hash1')
 			expect(result.pending[0].kind).toBe('html')
 			expect(result.pending[0].showSkeleton).toBe(true)
-			// original should be placeholdered text
-			expect(result.pending[0].original).toBe('Hello [HB1]world[/HB1]')
-			// originalHtml should be raw innerHTML
-			expect(result.pending[0].originalHtml).toBe('Hello <strong>world</strong>')
+			// content should be raw innerHTML
+			expect(result.pending[0].content).toBe('Hello <strong>world</strong>')
 
 			// Check DOM was marked
 			const p = doc.querySelector('p')

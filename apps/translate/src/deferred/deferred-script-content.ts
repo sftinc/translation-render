@@ -36,7 +36,7 @@ var ti=document.querySelector('title[data-pantolingo-pending="'+h+'"]');if(ti)ti
 }
 function poll(pend,cnt){
 if(!pend.length||cnt>=MAX){for(var i=0;i<pend.length;i++)show(pend[i]);return}
-var body={segments:pend.map(function(s){var o={hash:s.hash,original:s.original,kind:s.kind};if(s.originalHtml)o.originalHtml=s.originalHtml;if(s.attr)o.attr=s.attr;return o})};
+var body={segments:pend.map(function(s){var o={hash:s.hash,kind:s.kind,content:s.content};if(s.attr)o.attr=s.attr;return o})};
 fetch('/__pantolingo/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(ts){
 var still=[];
 for(var i=0;i<pend.length;i++){var s=pend[i];if(ts[s.hash]!==undefined)apply(s.hash,ts[s.hash],s.kind,s.attr);else still.push(s)}

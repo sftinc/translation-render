@@ -13,9 +13,8 @@ import { htmlToPlaceholders, placeholdersToHtml } from '../dom/placeholders.js'
 interface TranslateRequestBody {
 	segments: Array<{
 		hash: string
-		original: string // Placeholdered text (for pattern restoration)
-		originalHtml?: string // Raw innerHTML for HTML segments (for HTML tag restoration)
 		kind: 'html' | 'text' | 'attr'
+		content: string // Raw content (innerHTML for html, text for text, value for attr)
 		attr?: string
 	}>
 }
@@ -68,8 +67,18 @@ export async function handleTranslateRequest(
 		}
 
 		try {
-			// Re-extract patterns from placeholdered text
-			const patternData = applyPatterns(segment.original)
+			let textForPatterns = segment.content
+			let htmlReplacements: ReturnType<typeof htmlToPlaceholders>['replacements'] | undefined
+
+			// For HTML segments, first convert HTML to placeholders
+			if (segment.kind === 'html') {
+				const htmlData = htmlToPlaceholders(segment.content)
+				textForPatterns = htmlData.text
+				htmlReplacements = htmlData.replacements
+			}
+
+			// Extract patterns from the text (after HTML placeholdering if applicable)
+			const patternData = applyPatterns(textForPatterns)
 
 			// Restore patterns in translation
 			let restoredTranslation = restorePatterns(
@@ -78,10 +87,9 @@ export async function handleTranslateRequest(
 				patternData.isUpperCase
 			)
 
-			// For HTML segments, also restore HTML placeholders using the raw innerHTML
-			if (segment.kind === 'html' && segment.originalHtml) {
-				const { replacements } = htmlToPlaceholders(segment.originalHtml)
-				restoredTranslation = placeholdersToHtml(restoredTranslation, replacements)
+			// For HTML segments, restore HTML placeholders
+			if (htmlReplacements) {
+				restoredTranslation = placeholdersToHtml(restoredTranslation, htmlReplacements)
 			}
 
 			result[segment.hash] = restoredTranslation

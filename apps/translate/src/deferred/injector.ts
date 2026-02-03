@@ -58,8 +58,7 @@ export function injectDeferredAssets(document: Document, pending: PendingSegment
 		pending.map((p) => ({
 			hash: p.hash,
 			kind: p.kind,
-			original: p.original,
-			...(p.originalHtml ? { originalHtml: p.originalHtml } : {}),
+			content: p.content,
 			...(p.attr ? { attr: p.attr } : {}),
 		}))
 	)
