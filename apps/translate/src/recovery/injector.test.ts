@@ -123,7 +123,7 @@ describe('injectRecoveryAssets', () => {
 
 		const dictScript = document.querySelector('script[data-pantolingo="dictionary"]')
 		expect(dictScript).not.toBeNull()
-		expect(dictScript?.textContent).toContain('window.__PANTOLINGO__')
+		expect(dictScript?.textContent).toContain('window.__PANTOLINGO_RECOVERY__')
 		expect(dictScript?.textContent).toContain('"Hello":"Hola"')
 		expect(dictScript?.textContent).toContain('"lang":"es"')
 	})
@@ -186,7 +186,7 @@ describe('getRecoveryScript', () => {
 
 	it('contains expected recovery functions', () => {
 		const script = getRecoveryScript()
-		expect(script).toContain('__PANTOLINGO__')
+		expect(script).toContain('__PANTOLINGO_RECOVERY__')
 		expect(script).toContain('pantolingo-ready')
 		expect(script).toContain('MutationObserver')
 	})

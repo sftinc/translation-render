@@ -6,13 +6,13 @@
  *
  * The recovery script:
  * 1. Waits for DOMContentLoaded
- * 2. Applies translations from window.__PANTOLINGO__ dictionary
+ * 2. Applies translations from window.__PANTOLINGO_RECOVERY__ dictionary
  * 3. Sets up MutationObserver for hydration changes
  * 4. Disconnects observer after 2 seconds
  * 5. Adds .pantolingo-ready to body (triggers CSS visibility)
  *
  * Dictionary structure:
- * window.__PANTOLINGO__ = {
+ * window.__PANTOLINGO_RECOVERY__ = {
  *   text: { "Hello": "Hola", ... },      // text node translations
  *   html: { "Hello world": "<em>Hola</em> mundo", ... },  // innerHTML translations
  *   attrs: { "Search": "Buscar", ... },   // attribute translations
@@ -32,7 +32,7 @@ interface PantolingoDictionary {
 
 declare global {
 	interface Window {
-		__PANTOLINGO__?: PantolingoDictionary
+		__PANTOLINGO_RECOVERY__?: PantolingoDictionary
 	}
 }
 
@@ -212,7 +212,7 @@ function applyPathTranslations(dictionary: PantolingoDictionary): void {
  * Main recovery function - applies all translations
  */
 function recoverTranslations(): void {
-	const dictionary = window.__PANTOLINGO__
+	const dictionary = window.__PANTOLINGO_RECOVERY__
 	if (!dictionary) return
 
 	const processed = new Set<Element>()
@@ -231,7 +231,7 @@ function recoverTranslations(): void {
  * Handle mutations from React/Next.js hydration
  */
 function handleMutations(mutations: MutationRecord[]): void {
-	const dictionary = window.__PANTOLINGO__
+	const dictionary = window.__PANTOLINGO_RECOVERY__
 	if (!dictionary) return
 
 	const processed = new Set<Element>()

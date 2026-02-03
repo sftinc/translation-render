@@ -5,7 +5,7 @@
  * Source: recovery-script.ts (for documentation/reference)
  *
  * Features:
- * - Applies translations from window.__PANTOLINGO__ dictionary
+ * - Applies translations from window.__PANTOLINGO_RECOVERY__ dictionary
  * - Handles HTML block translations (innerHTML replacement)
  * - Handles text node translations (preserves whitespace)
  * - Handles attribute translations (alt, title, placeholder, aria-label)
@@ -15,7 +15,7 @@
  */
 
 export const RECOVERY_SCRIPT = `(function(){
-var d=window.__PANTOLINGO__;
+var d=window.__PANTOLINGO_RECOVERY__;
 if(!d)return;
 var ATTRS=['alt','title','placeholder','aria-label'];
 var BLOCKS=['P','H1','H2','H3','H4','H5','H6','LI','TD','TH','DD','DT','FIGCAPTION','CAPTION','LABEL','LEGEND','SUMMARY'];

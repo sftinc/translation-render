@@ -86,7 +86,7 @@ export function injectRecoveryAssets(document: Document, dictionary: Translation
 		paths: dictionary.paths,
 		lang: dictionary.targetLang,
 	})
-	dictionaryScript.textContent = `window.__PANTOLINGO__=${dictionaryJson}`
+	dictionaryScript.textContent = `window.__PANTOLINGO_RECOVERY__=${dictionaryJson}`
 	body.appendChild(dictionaryScript)
 }
 

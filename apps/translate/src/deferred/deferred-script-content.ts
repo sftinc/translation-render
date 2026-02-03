@@ -12,7 +12,7 @@
  */
 
 export const DEFERRED_SCRIPT = `(function(){
-var p=window.__PANTOLINGO_PENDING__;
+var p=window.__PANTOLINGO_DEFERRED__;
 if(!p||!p.length)return;
 var DELAY=1000,INT=1000,MAX=10;
 function apply(h,t,k,a){

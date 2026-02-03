@@ -6,13 +6,13 @@
  *
  * The deferred script:
  * 1. Waits 1s initial delay
- * 2. Collects pending segments from window.__PANTOLINGO_PENDING__
+ * 2. Collects pending segments from window.__PANTOLINGO_DEFERRED__
  * 3. Polls /__pantolingo/translate every 1s
  * 4. Applies completed translations and removes from pending list
  * 5. On timeout (10 polls): removes skeletons, shows original English
  *
  * Pending segment structure:
- * window.__PANTOLINGO_PENDING__ = [
+ * window.__PANTOLINGO_DEFERRED__ = [
  *   { hash: 'abc123', kind: 'html', original: 'Hello [HB1]world[/HB1]' },
  *   { hash: 'def456', kind: 'text', original: 'Hello' },
  *   { hash: 'ghi789', kind: 'attr', original: 'Search', attr: 'placeholder' },
@@ -30,7 +30,7 @@ interface PendingSegment {
 
 declare global {
 	interface Window {
-		__PANTOLINGO_PENDING__?: PendingSegment[]
+		__PANTOLINGO_DEFERRED__?: PendingSegment[]
 	}
 }
 
@@ -229,7 +229,7 @@ async function pollForTranslations(pending: PendingSegment[], pollCount: number)
  * Initialize deferred translation polling
  */
 function init(): void {
-	const pending = window.__PANTOLINGO_PENDING__
+	const pending = window.__PANTOLINGO_DEFERRED__
 	if (!pending || pending.length === 0) {
 		return
 	}

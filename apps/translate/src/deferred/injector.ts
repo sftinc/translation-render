@@ -62,7 +62,7 @@ export function injectDeferredAssets(document: Document, pending: PendingSegment
 			...(p.attr ? { attr: p.attr } : {}),
 		}))
 	)
-	pendingScript.textContent = `window.__PANTOLINGO_PENDING__=${pendingJson}`
+	pendingScript.textContent = `window.__PANTOLINGO_DEFERRED__=${pendingJson}`
 	body.appendChild(pendingScript)
 }
 
