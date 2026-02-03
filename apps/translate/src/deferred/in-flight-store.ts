@@ -66,14 +66,14 @@ export function deleteInFlight(key: string): void {
 }
 
 /**
- * Build the in-flight key for a segment
+ * Build the in-flight key for a translation
  * @param websiteId - Website ID
  * @param lang - Target language code
- * @param textHash - SHA-256 hash of the normalized text
+ * @param text - Content identifier (segment hash or normalized path)
  * @returns The key string
  */
-export function buildInFlightKey(websiteId: number, lang: string, textHash: string): string {
-	return `${websiteId}:${lang}:${textHash}`
+export function buildInFlightKey(websiteId: number, lang: string, text: string): string {
+	return `${websiteId}:${lang}:${text}`
 }
 
 // Export for testing only

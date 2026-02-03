@@ -1,21 +1,21 @@
 import { pool } from './pool.js'
 
 /**
- * Record a page view for a website path + language combination.
+ * Record a page view for a website path + translation combination.
  * Increments hit_count if already exists for today, otherwise inserts.
  * Non-blocking - errors are logged but don't throw.
  */
 export async function recordPageView(
 	websitePathId: number,
-	lang: string
+	translationId: number
 ): Promise<void> {
 	try {
 		await pool.query(
-			`INSERT INTO stats_page_view (website_path_id, lang, view_date, hit_count)
+			`INSERT INTO stats_page_view (website_path_id, translation_id, view_date, hit_count)
 			 VALUES ($1, $2, CURRENT_DATE, 1)
-			 ON CONFLICT (website_path_id, lang, view_date)
+			 ON CONFLICT (website_path_id, translation_id, view_date)
 			 DO UPDATE SET hit_count = stats_page_view.hit_count + 1`,
-			[websitePathId, lang]
+			[websitePathId, translationId]
 		)
 	} catch (error) {
 		console.error('Failed to record page view:', error)
