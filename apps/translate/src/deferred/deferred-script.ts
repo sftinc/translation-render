@@ -17,7 +17,7 @@
  * - Client updates ALL elements matching each hash (uses querySelectorAll, collects comments)
  * - This ensures duplicate text (e.g., "Help" appearing multiple times) all updates together
  *
- * Pending segment structure:
+ * Pending segment structure (content = original text for fallback display):
  * window.__PANTOLINGO_DEFERRED__ = [
  *   { hash: 'abc123', kind: 'html', content: 'Hello [HB1]world[/HB1]' },
  *   { hash: 'def456', kind: 'text', content: 'Hello' },
@@ -29,8 +29,7 @@
 interface PendingSegment {
 	hash: string
 	kind: 'html' | 'text' | 'attr'
-	original: string
-	originalHtml?: string // Raw innerHTML for HTML segments
+	content: string
 	attr?: string
 }
 
@@ -105,6 +104,14 @@ function applyTranslation(hash: string, translation: string, kind: 'html' | 'tex
 			}
 		}
 
+		// Fallback: if comment was destroyed by client JS, clean up by attribute
+		const fallbackEls = document.querySelectorAll(`[data-pantolingo-pending="${hash}"]:not(title)`)
+		for (let i = 0; i < fallbackEls.length; i++) {
+			fallbackEls[i].classList.remove('pantolingo-skeleton')
+			fallbackEls[i].removeAttribute('data-pantolingo-pending')
+			found = true
+		}
+
 		// Title check runs unconditionally (body text and title may share hash)
 		const title = document.querySelector(`title[data-pantolingo-pending="${hash}"]`)
 		if (title) {
@@ -170,6 +177,13 @@ function showOriginal(segment: PendingSegment): void {
 			comment.remove()
 		}
 
+		// Fallback: if comment was destroyed by client JS, clean up by attribute
+		const fallbackEls = document.querySelectorAll(`[data-pantolingo-pending="${hash}"]:not(title)`)
+		for (let i = 0; i < fallbackEls.length; i++) {
+			fallbackEls[i].classList.remove('pantolingo-skeleton')
+			fallbackEls[i].removeAttribute('data-pantolingo-pending')
+		}
+
 		// Title check runs unconditionally
 		const title = document.querySelector(`title[data-pantolingo-pending="${hash}"]`)
 		if (title) {
@@ -186,6 +200,18 @@ function showOriginal(segment: PendingSegment): void {
 }
 
 /**
+ * Global cleanup: remove all remaining skeleton artifacts from the page.
+ * Called after polling ends (timeout or all resolved) as a safety net.
+ */
+function cleanup(): void {
+	const els = document.querySelectorAll('.pantolingo-skeleton')
+	for (let i = 0; i < els.length; i++) {
+		els[i].classList.remove('pantolingo-skeleton')
+		els[i].removeAttribute('data-pantolingo-pending')
+	}
+}
+
+/**
  * Poll for translations and apply them
  */
 async function pollForTranslations(pending: PendingSegment[], pollCount: number): Promise<void> {
@@ -194,6 +220,7 @@ async function pollForTranslations(pending: PendingSegment[], pollCount: number)
 		for (const segment of pending) {
 			showOriginal(segment)
 		}
+		cleanup()
 		return
 	}
 
@@ -202,9 +229,8 @@ async function pollForTranslations(pending: PendingSegment[], pollCount: number)
 		const requestBody = {
 			segments: pending.map(s => ({
 				hash: s.hash,
-				original: s.original,
 				kind: s.kind,
-				...(s.originalHtml ? { originalHtml: s.originalHtml } : {}),
+				content: s.content,
 				...(s.attr ? { attr: s.attr } : {}),
 			})),
 		}
@@ -235,11 +261,13 @@ async function pollForTranslations(pending: PendingSegment[], pollCount: number)
 			}
 		}
 
-		// Schedule next poll if still have pending
+		// Schedule next poll if still have pending, otherwise cleanup
 		if (stillPending.length > 0) {
 			setTimeout(() => {
 				pollForTranslations(stillPending, pollCount + 1)
 			}, POLL_INTERVAL)
+		} else {
+			cleanup()
 		}
 	} catch (error) {
 		console.error('[Pantolingo] Polling error:', error)
