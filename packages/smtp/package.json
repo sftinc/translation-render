@@ -16,10 +16,10 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "nodemailer": "^6.9.16"
+    "nodemailer": "^8.0.0"
   },
   "devDependencies": {
-    "@types/nodemailer": "^6.4.17",
+    "@types/nodemailer": "^7.0.9",
     "dotenv": "^17.2.3",
     "typescript": "^5.9.3"
   }
