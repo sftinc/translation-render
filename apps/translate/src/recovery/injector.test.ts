@@ -180,7 +180,7 @@ describe('getRecoveryScript', () => {
 
 	it('contains IIFE wrapper', () => {
 		const script = getRecoveryScript()
-		expect(script).toMatch(/^\(function\(\)\{/)
+		expect(script).toMatch(/^"use strict";\(\(\)=>\{/)
 		expect(script).toMatch(/\}\)\(\);$/)
 	})
 

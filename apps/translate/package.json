@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "generate": "tsx scripts/generate-client-scripts.ts",
+    "dev": "pnpm run generate && tsx watch src/server.ts",
+    "build": "pnpm run generate && tsc",
     "start": "node dist/server.js"
   },
   "dependencies": {
